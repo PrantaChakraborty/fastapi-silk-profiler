@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>fastapi-silk-profiler reports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
+  rel="stylesheet"
+>
+<style>
+:root {
+  --bg: #080810;
+  --panel: #0c0c18;
+  --panel-2: #0a0a12;
+  --line: #1a1a2e;
+  --muted: #4a4a6a;
+  --text: #cbd5e1;
+  --title: #e2e8f0;
+  --accent: #00ffc8;
+  --danger: #ff6b6b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+  background: var(--bg);
+  color: var(--text);
+}
+.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+h1 { margin: 0; color: var(--title); }
+.subtitle { margin: 4px 0 0; color: #94a3b8; }
+.kicker {
+  color: var(--muted);
+  letter-spacing: 3px;
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+button {
+  border: 1px solid #5f2532;
+  border-radius: 6px;
+  background: #2a1218;
+  color: #fff;
+  padding: 9px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  gap: 14px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+.panel-title { margin: 0 0 10px; color: var(--accent); font-size: 14px; letter-spacing: 1px; }
+.list { max-height: 78vh; overflow-y: auto; }
+.report-item {
+  display: block;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  text-decoration: none;
+  color: inherit;
+  margin-bottom: 8px;
+  background: var(--panel-2);
+}
+.report-item:hover { border-color: #2c2c46; }
+.report-item.active { border-color: var(--accent); }
+.request { font-weight: 600; margin-bottom: 4px; color: var(--title); }
+.meta { color: #94a3b8; font-size: 11px; }
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.metric {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+}
+.metric span { color: var(--muted); font-size: 11px; }
+.metric strong { display: block; margin-top: 6px; word-break: break-word; color: var(--title); }
+h3 { margin: 0 0 8px; color: var(--accent); font-size: 13px; letter-spacing: 1px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { border: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
+thead th { background: #0f0f1a; color: #94a3b8; font-size: 11px; }
+pre {
+  white-space: pre-wrap;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.6;
+}
+code { color: #a78bfa; }
+.empty {
+  border: 1px dashed #2a2a40;
+  border-radius: 6px;
+  padding: 12px;
+  color: #94a3b8;
+}
+@media (max-width: 960px) {
+  .layout { grid-template-columns: 1fr; }
+  .list { max-height: 320px; }
+}
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div>
+        <div class="kicker">FASTAPI-SILK / DEEP DIVE</div>
+        <h1>fastapi-silk-profiler</h1>
+        <p class="subtitle">
+          Database profiling dashboard: request list, SQL timeline, pyinstrument.
+        </p>
+      </div>
+      <button id="clear-btn" type="button">Clear All Logs</button>
+    </div>
+    <div class="layout">
+      <section class="card">
+        <h2 class="panel-title">Captured Requests ($report_count)</h2>
+        <div class="list">$report_list_html</div>
+      </section>
+      <section class="card">
+        <h2 class="panel-title">Request Details</h2>
+        $details_html
+      </section>
+    </div>
+  </div>
+<script>
+document.getElementById("clear-btn")?.addEventListener("click", async () => {
+  const ok = window.confirm("Clear all profiling logs?");
+  if (!ok) return;
+  const response = await fetch("$escaped_clear_path", { method: "POST" });
+  if (response.ok) {
+    window.location.reload();
+    return;
+  }
+  window.alert("Failed to clear logs.");
+});
+</script>
+</body>
+</html>

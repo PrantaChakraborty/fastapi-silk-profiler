@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>fastapi-silk-profiler report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap"
+  rel="stylesheet"
+>
+<style>
+:root {
+  --bg: #080810;
+  --panel: #0c0c18;
+  --panel-2: #0a0a12;
+  --line: #1a1a2e;
+  --muted: #4a4a6a;
+  --text: #cbd5e1;
+  --title: #e2e8f0;
+  --accent: #00ffc8;
+  --warn: #fcd34d;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+  background: var(--bg);
+  color: var(--text);
+}
+.container { max-width: 1100px; margin: 0 auto; padding: 28px; }
+.kicker {
+  color: var(--muted);
+  letter-spacing: 3px;
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+.title {
+  margin: 0 0 12px 0;
+  color: var(--title);
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+h1, h2 { margin: 0 0 8px 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.metric {
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+}
+.label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+.value { margin-top: 6px; font-size: 16px; font-weight: 600; color: var(--title); }
+pre {
+  white-space: pre-wrap;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.6;
+}
+code { color: var(--warn); }
+h2 { color: var(--accent); font-size: 14px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="kicker">FASTAPI-SILK / REQUEST REPORT</div>
+    <h1 class="title">fastapi-silk-profiler</h1>
+    <div class="card">
+      <div class="grid">
+        $method_metric
+        $path_metric
+        $status_metric
+        $duration_metric
+        $sql_count_metric
+      </div>
+    </div>
+    <div class="card">
+      <h2>Captured SQL</h2>
+      <pre><code>$queries_json</code></pre>
+    </div>
+    <div class="card">
+      <h2>Pyinstrument (Text)</h2>
+      <pre>$pyinstrument_text</pre>
+    </div>
+  </div>
+</body>
+</html>
