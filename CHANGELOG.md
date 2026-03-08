@@ -10,10 +10,14 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 - SQLite-backed profile storage via `SQLiteReportStore`.
 - Dashboard endpoint `/_silk/reports` for browsing requests and SQL timing details.
 - Per-report endpoint `/_silk/reports/{report_id}` and clear endpoint `POST /_silk/reports/clear`.
+- Query analysis engine with per-request DB summary metrics (`total_db_time_ms`, `db_time_ratio`).
+- Slow/duplicate/N+1 SQL heuristics and per-query flags in JSON/text/dashboard views.
+- Optional SQLite `EXPLAIN QUERY PLAN` capture with request-level cap.
 
 ### Changed
 - `setup_silk_profiler` now supports `sqlite_db_path`.
 - Profiler auto-excludes dashboard endpoints from profiling to avoid self-profiling noise.
+- `ProfilerConfig` now supports `QueryAnalysisConfig` for SQL analysis tuning.
 
 ### Fixed
 - Example/dev setup now includes `uvicorn` as a development dependency.

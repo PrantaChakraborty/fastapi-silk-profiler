@@ -3,7 +3,8 @@
 from .config import ProfilerConfig
 from .endpoints import register_latest_report_endpoint
 from .middleware import SilkProfilerMiddleware
-from .models import ProfileReport, SQLQueryRecord
+from .models import ProfileReport, QueryAnalysisSummary, SQLQueryRecord
+from .query_analysis import QueryAnalysisConfig
 from .setup import setup_silk_profiler
 from .store import InMemoryReportStore, ReportStore, SQLiteReportStore
 
@@ -11,6 +12,8 @@ __all__ = [
     "InMemoryReportStore",
     "ProfileReport",
     "ProfilerConfig",
+    "QueryAnalysisConfig",
+    "QueryAnalysisSummary",
     "ReportStore",
     "SQLQueryRecord",
     "SilkProfilerMiddleware",

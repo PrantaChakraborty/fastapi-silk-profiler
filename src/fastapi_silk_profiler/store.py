@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections import deque
 from collections.abc import Sequence
+from dataclasses import asdict
 from threading import Lock
 from typing import Protocol
 
-from .models import ProfileReport, SQLQueryRecord
+from .models import ProfileReport, QueryAnalysisSummary, SQLQueryRecord
 
 
 def _sql_rows_to_records(rows: Sequence[sqlite3.Row]) -> list[SQLQueryRecord]:
@@ -26,6 +28,11 @@ def _sql_rows_to_records(rows: Sequence[sqlite3.Row]) -> list[SQLQueryRecord]:
             params=str(row["params"]),
             duration_ms=float(row["duration_ms"]),
             rowcount=int(row["rowcount"]) if row["rowcount"] is not None else None,
+            normalized_statement=str(row["normalized_statement"] or ""),
+            is_slow=bool(row["is_slow"]),
+            is_duplicate=bool(row["is_duplicate"]),
+            is_n_plus_one=bool(row["is_n_plus_one"]),
+            explain_plan=json.loads(str(row["explain_plan"] or "[]")),
         )
         for row in rows
     ]
@@ -141,6 +148,7 @@ class SQLiteReportStore:
                     path TEXT NOT NULL,
                     status_code INTEGER NOT NULL,
                     duration_ms REAL NOT NULL,
+                    query_analysis_json TEXT NOT NULL DEFAULT '{}',
                     pyinstrument_text TEXT NOT NULL,
                     pyinstrument_html TEXT NOT NULL
                 )
@@ -155,12 +163,53 @@ class SQLiteReportStore:
                     params TEXT NOT NULL,
                     duration_ms REAL NOT NULL,
                     rowcount INTEGER,
+                    normalized_statement TEXT NOT NULL DEFAULT '',
+                    is_slow INTEGER NOT NULL DEFAULT 0,
+                    is_duplicate INTEGER NOT NULL DEFAULT 0,
+                    is_n_plus_one INTEGER NOT NULL DEFAULT 0,
+                    explain_plan TEXT NOT NULL DEFAULT '[]',
                     FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE
                 )
                 """
             )
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_sql_queries_report_id ON sql_queries(report_id)"
+            )
+            self._ensure_column(
+                table="reports",
+                column="query_analysis_json",
+                sql_type="TEXT",
+                default_sql="'{}'",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="normalized_statement",
+                sql_type="TEXT",
+                default_sql="''",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="is_slow",
+                sql_type="INTEGER",
+                default_sql="0",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="is_duplicate",
+                sql_type="INTEGER",
+                default_sql="0",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="is_n_plus_one",
+                sql_type="INTEGER",
+                default_sql="0",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="explain_plan",
+                sql_type="TEXT",
+                default_sql="'[]'",
             )
 
     def add(self, report: ProfileReport) -> None:
@@ -174,9 +223,9 @@ class SQLiteReportStore:
                 """
                 INSERT INTO reports (
                     id, created_at, method, path, status_code, duration_ms,
-                    pyinstrument_text, pyinstrument_html
+                    query_analysis_json, pyinstrument_text, pyinstrument_html
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     report.id,
@@ -185,6 +234,7 @@ class SQLiteReportStore:
                     report.path,
                     report.status_code,
                     report.duration_ms,
+                    json.dumps(asdict(report.query_analysis)),
                     report.pyinstrument_text,
                     report.pyinstrument_html,
                 ),
@@ -192,9 +242,10 @@ class SQLiteReportStore:
             self._conn.executemany(
                 """
                 INSERT INTO sql_queries (
-                    report_id, position, statement, params, duration_ms, rowcount
+                    report_id, position, statement, params, duration_ms, rowcount,
+                    normalized_statement, is_slow, is_duplicate, is_n_plus_one, explain_plan
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -204,6 +255,11 @@ class SQLiteReportStore:
                         query.params,
                         query.duration_ms,
                         query.rowcount,
+                        query.normalized_statement,
+                        int(query.is_slow),
+                        int(query.is_duplicate),
+                        int(query.is_n_plus_one),
+                        json.dumps(query.explain_plan),
                     )
                     for index, query in enumerate(report.sql_queries)
                 ],
@@ -219,7 +275,7 @@ class SQLiteReportStore:
         row = self._conn.execute(
             """
             SELECT id, created_at, method, path, status_code, duration_ms,
-                   pyinstrument_text, pyinstrument_html
+                   query_analysis_json, pyinstrument_text, pyinstrument_html
             FROM reports
             ORDER BY rowid DESC
             LIMIT 1
@@ -236,7 +292,7 @@ class SQLiteReportStore:
         rows = self._conn.execute(
             """
             SELECT id, created_at, method, path, status_code, duration_ms,
-                   pyinstrument_text, pyinstrument_html
+                   query_analysis_json, pyinstrument_text, pyinstrument_html
             FROM reports
             ORDER BY rowid ASC
             """
@@ -255,7 +311,7 @@ class SQLiteReportStore:
         row = self._conn.execute(
             """
             SELECT id, created_at, method, path, status_code, duration_ms,
-                   pyinstrument_text, pyinstrument_html
+                   query_analysis_json, pyinstrument_text, pyinstrument_html
             FROM reports
             WHERE id = ?
             """,
@@ -318,12 +374,15 @@ class SQLiteReportStore:
         sql_rows = self._conn.execute(
             """
             SELECT statement, params, duration_ms, rowcount
+                   ,normalized_statement, is_slow, is_duplicate, is_n_plus_one, explain_plan
             FROM sql_queries
             WHERE report_id = ?
             ORDER BY position ASC
             """,
             (row["id"],),
         ).fetchall()
+        raw_summary = str(row["query_analysis_json"] or "{}")
+        summary_json = json.loads(raw_summary)
         return ProfileReport(
             id=str(row["id"]),
             created_at=str(row["created_at"]),
@@ -331,7 +390,18 @@ class SQLiteReportStore:
             path=str(row["path"]),
             status_code=int(row["status_code"]),
             duration_ms=float(row["duration_ms"]),
+            query_analysis=QueryAnalysisSummary(**summary_json),
             pyinstrument_text=str(row["pyinstrument_text"]),
             pyinstrument_html=str(row["pyinstrument_html"]),
             sql_queries=_sql_rows_to_records(sql_rows),
+        )
+
+    def _ensure_column(self, table: str, column: str, sql_type: str, default_sql: str) -> None:
+        """Add column when missing to support in-place schema upgrades."""
+        rows = self._conn.execute(f"PRAGMA table_info({table})").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column in existing:
+            return
+        self._conn.execute(
+            f"ALTER TABLE {table} ADD COLUMN {column} {sql_type} NOT NULL DEFAULT {default_sql}"
         )

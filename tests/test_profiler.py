@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, text
 from fastapi_silk_profiler import (
     InMemoryReportStore,
     ProfilerConfig,
+    QueryAnalysisConfig,
     ReportStore,
     SQLiteReportStore,
     setup_silk_profiler,
@@ -36,6 +37,17 @@ def create_test_app(config: ProfilerConfig, store: ReportStore) -> FastAPI:
         engine = create_engine("sqlite+pysqlite:///:memory:")
         with engine.connect() as conn:
             conn.execute(text("select 1"))
+        engine.dispose()
+        return {"ok": 1}
+
+    @app.get("/sql-analysis")
+    def sql_analysis() -> dict[str, int]:
+        engine = create_engine("sqlite+pysqlite:///:memory:")
+        with engine.connect() as conn:
+            conn.execute(text("select :value as value"), {"value": 1})
+            conn.execute(text("select :value as value"), {"value": 1})
+            conn.execute(text("select :value as value"), {"value": 2})
+            conn.execute(text("select :value as value"), {"value": 3})
         engine.dispose()
         return {"ok": 1}
 
@@ -97,6 +109,65 @@ def test_sql_capture_records_queries() -> None:
     assert "select 1" in query.statement.lower()
     assert isinstance(query.params, str)
     assert query.duration_ms >= 0
+
+
+def test_query_analysis_marks_slow_duplicate_and_n_plus_one() -> None:
+    store = InMemoryReportStore(max_size=10)
+    app = create_test_app(
+        ProfilerConfig(
+            enabled=True,
+            capture_sql=True,
+            query_analysis=QueryAnalysisConfig(
+                enabled=True,
+                slow_query_threshold_ms=0.0,
+                duplicate_min_occurrences=2,
+                n_plus_one_min_occurrences=3,
+                capture_explain=False,
+            ),
+        ),
+        store,
+    )
+    client = TestClient(app)
+
+    response = client.get("/sql-analysis")
+
+    assert response.status_code == 200
+    report = store.latest()
+    assert report is not None
+    assert report.query_analysis.slow_query_count >= 4
+    assert report.query_analysis.duplicate_query_count >= 2
+    assert report.query_analysis.n_plus_one_query_count >= 4
+
+    payload = client.get("/_silk/latest?format=json").json()
+    assert payload["query_analysis"]["slow_query_count"] >= 4
+    assert payload["query_analysis"]["duplicate_query_count"] >= 2
+    assert payload["query_analysis"]["n_plus_one_query_count"] >= 4
+    assert any(query["is_duplicate"] for query in payload["sql_queries"])
+    assert any(query["is_n_plus_one"] for query in payload["sql_queries"])
+
+
+def test_query_analysis_can_capture_sqlite_explain_plans() -> None:
+    store = InMemoryReportStore(max_size=10)
+    app = create_test_app(
+        ProfilerConfig(
+            enabled=True,
+            capture_sql=True,
+            query_analysis=QueryAnalysisConfig(
+                enabled=True,
+                capture_explain=True,
+                explain_max_statements_per_request=5,
+            ),
+        ),
+        store,
+    )
+    client = TestClient(app)
+
+    response = client.get("/sql")
+
+    assert response.status_code == 200
+    report = store.latest()
+    assert report is not None
+    assert any(query.explain_plan for query in report.sql_queries)
 
 
 def test_report_store_retention() -> None:
@@ -264,6 +335,7 @@ def test_sqlite_store_persists_reports_between_instances(tmp_path: Path) -> None
     assert restored is not None
     assert restored.id == latest.id
     assert restored.path == "/sql"
+    assert restored.query_analysis.total_db_time_ms >= 0
     assert len(store_b) == 1
 
     store_a.clear()

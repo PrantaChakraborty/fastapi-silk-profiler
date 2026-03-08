@@ -16,6 +16,24 @@ class SQLQueryRecord:
     params: str
     duration_ms: float
     rowcount: int | None
+    normalized_statement: str = ""
+    is_slow: bool = False
+    is_duplicate: bool = False
+    is_n_plus_one: bool = False
+    explain_plan: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class QueryAnalysisSummary:
+    """Request-level SQL analysis summary."""
+
+    total_db_time_ms: float = 0.0
+    db_time_ratio: float = 0.0
+    slow_query_count: int = 0
+    duplicate_query_count: int = 0
+    duplicate_query_groups: int = 0
+    n_plus_one_query_count: int = 0
+    n_plus_one_groups: int = 0
 
 
 @dataclass(slots=True)
@@ -27,6 +45,7 @@ class ProfileReport:
     status_code: int
     duration_ms: float
     sql_queries: list[SQLQueryRecord] = field(default_factory=list)
+    query_analysis: QueryAnalysisSummary = field(default_factory=QueryAnalysisSummary)
     pyinstrument_text: str = ""
     pyinstrument_html: str = ""
     id: str = field(default_factory=lambda: str(uuid4()))

@@ -31,6 +31,13 @@ Current product strategy is to prioritize **database profiling** first, then exp
 - Row count per query (where available).
 - Per-request SQL timeline in dashboard.
 - Persistent SQL history in SQLite mode.
+- Request-level DB summary fields:
+  - `total_db_time_ms`
+  - `db_time_ratio`
+- Slow query flagging with configurable threshold.
+- Duplicate query detection (same normalized SQL + same params).
+- N+1 heuristic (same normalized SQL with varying params).
+- Optional SQLite `EXPLAIN QUERY PLAN` capture.
 
 ### Dashboard (Current)
 
@@ -42,18 +49,10 @@ Current product strategy is to prioritize **database profiling** first, then exp
 
 ## In Progress / Next (DB-Focused)
 
-1. Request-level DB summary fields:
-   - `total_db_time_ms`
-   - `db_time_ratio` (`db_time / request_time`)
-2. Slow query flagging:
-   - Configurable threshold (example: `100ms`)
-3. Duplicate query detection:
-   - Same SQL + same params repeated in one request
-4. N+1 heuristic:
-   - Same normalized SQL pattern repeated with varying params
-5. Query grouping UI:
+1. Query grouping UI:
    - Slow queries section
    - Duplicate/N+1 warnings per request
+2. Extended `EXPLAIN` support beyond SQLite.
 
 ## Future Phases
 

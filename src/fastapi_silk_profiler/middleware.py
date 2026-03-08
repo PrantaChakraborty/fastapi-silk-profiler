@@ -13,7 +13,13 @@ from starlette.types import ASGIApp
 
 from .config import ProfilerConfig
 from .models import ProfileReport, SQLQueryRecord
-from .sql_capture import ensure_sqlalchemy_hooks, start_sql_capture, stop_sql_capture
+from .query_analysis import analyze_queries
+from .sql_capture import (
+    SQLCaptureOptions,
+    ensure_sqlalchemy_hooks,
+    start_sql_capture,
+    stop_sql_capture,
+)
 from .store import ReportStore
 
 
@@ -55,7 +61,14 @@ class SilkProfilerMiddleware(BaseHTTPMiddleware):
         sql_queries: list[SQLQueryRecord] = []
         sql_token = None
         if self._config.capture_sql:
-            sql_queries, sql_token = start_sql_capture()
+            sql_queries, sql_token = start_sql_capture(
+                SQLCaptureOptions(
+                    capture_explain=self._config.query_analysis.capture_explain,
+                    explain_max_statements_per_request=(
+                        self._config.query_analysis.explain_max_statements_per_request
+                    ),
+                )
+            )
 
         started = perf_counter()
         response: Response | None = None
@@ -67,12 +80,19 @@ class SilkProfilerMiddleware(BaseHTTPMiddleware):
             profiler.stop()
             if sql_token is not None:
                 stop_sql_capture(sql_token)
+            duration_ms = (perf_counter() - started) * 1000
+            query_analysis = analyze_queries(
+                queries=sql_queries,
+                request_duration_ms=duration_ms,
+                config=self._config.query_analysis,
+            )
             report = ProfileReport(
                 method=request.method,
                 path=request.url.path,
                 status_code=response.status_code if response is not None else 500,
-                duration_ms=(perf_counter() - started) * 1000,
+                duration_ms=duration_ms,
                 sql_queries=sql_queries,
+                query_analysis=query_analysis,
                 pyinstrument_text=profiler.output_text(unicode=True, color=False),
                 pyinstrument_html=profiler.output_html(),
             )

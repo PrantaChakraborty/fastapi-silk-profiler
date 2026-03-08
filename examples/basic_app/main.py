@@ -6,11 +6,12 @@ from collections.abc import Generator
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import String, create_engine, func, select
+from sqlalchemy import String, create_engine, func, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
-from fastapi_silk_profiler import ProfilerConfig, setup_silk_profiler
+from fastapi_silk_profiler import ProfilerConfig, QueryAnalysisConfig, setup_silk_profiler
 
 
 class Base(DeclarativeBase):
@@ -75,10 +76,66 @@ store = setup_silk_profiler(
     config=ProfilerConfig(
         enabled=True,
         capture_sql=True,
+        query_analysis=QueryAnalysisConfig(
+            enabled=True,
+            slow_query_threshold_ms=1.0,
+            duplicate_min_occurrences=2,
+            n_plus_one_min_occurrences=3,
+            capture_explain=True,
+        ),
         exclude_paths=["/docs", "/openapi.json", "/redoc", "/_silk/latest"],
     ),
     sqlite_db_path="./silk_profiles.db",
 )
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def home() -> HTMLResponse:
+    """Render a quick route index for local demo usage."""
+    routes = [
+        ("GET", "/", "This route index page."),
+        ("POST", "/seed", "Seed sample data for CRUD and profiling."),
+        ("GET", "/items", "List all items."),
+        ("POST", "/items", "Create one item."),
+        ("GET", "/items/{item_id}", "Fetch one item by id."),
+        ("PUT", "/items/{item_id}", "Update one item by id."),
+        ("DELETE", "/items/{item_id}", "Delete one item by id."),
+        ("GET", "/workload", "Run mixed read/write SQL workload."),
+        ("GET", "/analysis-demo", "Generate slow/duplicate/N+1 SQL patterns."),
+        ("GET", "/_silk/latest", "Latest profiling report (json/text/html)."),
+        ("GET", "/_silk/reports", "Profiler dashboard with grouped query analysis."),
+        ("POST", "/_silk/reports/clear", "Clear all saved profiling reports."),
+    ]
+    rows = "".join(
+        f"<tr><td><code>{method}</code></td><td><code>{path}</code></td><td>{description}</td></tr>"
+        for method, path, description in routes
+    )
+    page = f"""
+    <!doctype html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>fastapi-silk-profiler example</title>
+      <style>
+        body {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin: 24px; }}
+        table {{ border-collapse: collapse; width: 100%; max-width: 980px; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background: #f4f4f4; }}
+        code {{ background: #f8f8f8; padding: 1px 4px; border-radius: 4px; }}
+      </style>
+    </head>
+    <body>
+      <h1>fastapi-silk-profiler example app</h1>
+      <p>Use the routes below to generate traffic and inspect profiling output.</p>
+      <table>
+        <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </body>
+    </html>
+    """
+    return HTMLResponse(page)
 
 
 @app.post("/items", response_model=ItemRead)
@@ -160,3 +217,42 @@ def workload(session: SessionDep) -> dict[str, int]:
         "total_items": int(refreshed_total) if refreshed_total is not None else 0,
         "reports_in_store": len(store.list()),
     }
+
+
+@app.get("/analysis-demo")
+def analysis_demo(session: SessionDep) -> dict[str, int]:
+    """Generate query patterns for slow/duplicate/N+1 dashboard sections."""
+    total = session.scalar(select(func.count()).select_from(Item))
+    if (total or 0) < 8:
+        for index in range(1, 9):
+            session.add(Item(name=f"Demo {index}", description="analysis demo seed"))
+        session.commit()
+
+    item_ids = session.scalars(select(Item.id).order_by(Item.id.asc()).limit(6)).all()
+    if not item_ids:
+        return {"queries_executed": 0, "item_ids_used": 0}
+
+    first_id = item_ids[0]
+    # Duplicate signature: same SQL + same params executed repeatedly.
+    for _ in range(3):
+        session.scalar(select(Item.name).where(Item.id == first_id))
+
+    # N+1 pattern: same normalized SQL with varying params.
+    for item_id in item_ids:
+        session.scalar(select(Item.description).where(Item.id == item_id))
+
+    # Slow SQLite query for demo visibility.
+    session.execute(
+        text(
+            """
+            WITH RECURSIVE t(x) AS (
+                SELECT 1
+                UNION ALL
+                SELECT x + 1 FROM t WHERE x < 40000
+            )
+            SELECT sum(x) FROM t
+            """
+        )
+    ).scalar_one()
+
+    return {"queries_executed": 3 + len(item_ids) + 1, "item_ids_used": len(item_ids)}

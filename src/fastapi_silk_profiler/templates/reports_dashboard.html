@@ -54,6 +54,48 @@ button {
   font-weight: 600;
   cursor: pointer;
 }
+button:hover { filter: brightness(1.1); }
+.btn-secondary {
+  border-color: var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+}
+.modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(8, 8, 16, 0.72);
+  z-index: 50;
+}
+.modal[aria-hidden="false"] { display: flex; }
+.modal-card {
+  width: min(420px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  padding: 16px;
+}
+.modal-title {
+  margin: 0 0 8px;
+  color: var(--title);
+  font-size: 16px;
+}
+.modal-copy {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.modal-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .layout {
   display: grid;
   grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
@@ -144,16 +186,52 @@ code { color: #a78bfa; }
       </section>
     </div>
   </div>
+  <div id="confirm-clear-modal" class="modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirm-clear-title">
+      <h2 id="confirm-clear-title" class="modal-title">Clear All Logs</h2>
+      <p class="modal-copy">
+        This will permanently remove all captured profiling reports. This action cannot be undone.
+      </p>
+      <div class="modal-actions">
+        <button id="modal-cancel-btn" class="btn-secondary" type="button">Cancel</button>
+        <button id="modal-confirm-btn" type="button">Clear Logs</button>
+      </div>
+    </div>
+  </div>
 <script>
-document.getElementById("clear-btn")?.addEventListener("click", async () => {
-  const ok = window.confirm("Clear all profiling logs?");
-  if (!ok) return;
+const clearBtn = document.getElementById("clear-btn");
+const clearModal = document.getElementById("confirm-clear-modal");
+const modalCancelBtn = document.getElementById("modal-cancel-btn");
+const modalConfirmBtn = document.getElementById("modal-confirm-btn");
+
+const showModal = () => {
+  if (!clearModal) return;
+  clearModal.setAttribute("aria-hidden", "false");
+  modalCancelBtn?.focus();
+};
+
+const hideModal = () => {
+  if (!clearModal) return;
+  clearModal.setAttribute("aria-hidden", "true");
+};
+
+clearBtn?.addEventListener("click", showModal);
+modalCancelBtn?.addEventListener("click", hideModal);
+clearModal?.addEventListener("click", (event) => {
+  if (event.target === clearModal) hideModal();
+});
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") hideModal();
+});
+
+modalConfirmBtn?.addEventListener("click", async () => {
   const response = await fetch("$escaped_clear_path", { method: "POST" });
   if (response.ok) {
     window.location.reload();
     return;
   }
-  window.alert("Failed to clear logs.");
+  hideModal();
+  window.alert("Failed to clear logs. Please try again.");
 });
 </script>
 </body>

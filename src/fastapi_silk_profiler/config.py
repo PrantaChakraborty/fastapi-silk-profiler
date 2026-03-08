@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .query_analysis import QueryAnalysisConfig
+
 
 @dataclass(slots=True)
 class ProfilerConfig:
@@ -15,6 +17,7 @@ class ProfilerConfig:
         exclude_paths: Path prefixes that should never be profiled.
         store_size: Maximum number of reports to keep in memory.
         capture_sql: Enables SQLAlchemy query capture when True.
+        query_analysis: SQL query analysis behavior.
     """
 
     enabled: bool = False
@@ -24,6 +27,7 @@ class ProfilerConfig:
     )
     store_size: int = 100
     capture_sql: bool = True
+    query_analysis: QueryAnalysisConfig = field(default_factory=QueryAnalysisConfig)
 
     def should_profile(self, path: str) -> bool:
         """Return True when a request path should be profiled.

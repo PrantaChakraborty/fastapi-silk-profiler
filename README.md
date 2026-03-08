@@ -13,7 +13,7 @@ uv add fastapi-silk-profiler
 ```python
 from fastapi import FastAPI
 
-from fastapi_silk_profiler import ProfilerConfig, setup_silk_profiler
+from fastapi_silk_profiler import QueryAnalysisConfig, ProfilerConfig, setup_silk_profiler
 
 app = FastAPI()
 setup_silk_profiler(
@@ -21,6 +21,13 @@ setup_silk_profiler(
     config=ProfilerConfig(
         enabled=True,
         capture_sql=True,
+        query_analysis=QueryAnalysisConfig(
+            enabled=True,
+            slow_query_threshold_ms=100.0,
+            duplicate_min_occurrences=2,
+            n_plus_one_min_occurrences=3,
+            capture_explain=False,  # set True to collect SQLite EXPLAIN QUERY PLAN
+        ),
         exclude_paths=["/docs", "/openapi.json", "/redoc", "/_silk/latest"],
     ),
     sqlite_db_path="./silk_profiles.db",  # optional: persist reports to SQLite
@@ -59,6 +66,13 @@ Template files (independent from Python logic):
 - `exclude_paths: list[str]`
 - `store_size: int`
 - `capture_sql: bool`
+- `query_analysis: QueryAnalysisConfig`
+  - `enabled: bool`
+  - `slow_query_threshold_ms: float`
+  - `duplicate_min_occurrences: int`
+  - `n_plus_one_min_occurrences: int`
+  - `capture_explain: bool` (SQLite support currently)
+  - `explain_max_statements_per_request: int`
 
 Implementation status and phased roadmap:
 
@@ -92,6 +106,7 @@ The example app includes CRUD + workload routes so you can generate profiling da
 - `PUT /items/{item_id}`
 - `DELETE /items/{item_id}`
 - `GET /workload`
+- `GET /analysis-demo` (generates slow/duplicate/N+1 SQL patterns)
 
 Then inspect:
 
