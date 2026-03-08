@@ -10,6 +10,7 @@ from functools import cache
 from importlib.resources import files
 from string import Template
 
+from .config import DashboardUIConfig
 from .models import ProfileReport
 
 
@@ -188,6 +189,7 @@ def _render_group_card(
     columns: list[str],
     rows: list[list[str]],
     empty_message: str,
+    show_tooltips: bool,
 ) -> str:
     """Render one query-analysis group card."""
     tooltip_by_column = {
@@ -204,8 +206,16 @@ def _render_group_card(
         )
     headers = "".join(
         (
-            f"<th><span title=\"{html.escape(tooltip_by_column.get(column, column))}\">"
-            f"{html.escape(column)}</span></th>"
+            "<th>"
+            + (
+                (
+                    f"<span title=\"{html.escape(tooltip_by_column.get(column, column))}\">"
+                    f"{html.escape(column)}</span>"
+                )
+                if show_tooltips
+                else html.escape(column)
+            )
+            + "</th>"
         )
         for column in columns
     )
@@ -220,7 +230,7 @@ def _render_group_card(
     )
 
 
-def _render_query_analysis_groups(report: ProfileReport) -> str:
+def _render_query_analysis_groups(report: ProfileReport, dashboard_ui: DashboardUIConfig) -> str:
     """Render grouped bottleneck analysis tables for one report."""
     slow_groups: dict[str, _QueryGroupBucket] = defaultdict(_QueryGroupBucket)
     duplicate_groups: dict[tuple[str, str], _QueryGroupBucket] = defaultdict(_QueryGroupBucket)
@@ -300,18 +310,21 @@ def _render_query_analysis_groups(report: ProfileReport) -> str:
                 columns=["Calls", "Total ms", "Max ms", "SQL"],
                 rows=slow_rows,
                 empty_message="No slow queries flagged.",
+                show_tooltips=dashboard_ui.show_column_tooltips,
             ),
             _render_group_card(
                 title="Top Duplicate Query Offenders",
                 columns=["Calls", "Total ms", "Max ms", "SQL"],
                 rows=duplicate_rows,
                 empty_message="No duplicate query groups flagged.",
+                show_tooltips=dashboard_ui.show_column_tooltips,
             ),
             _render_group_card(
                 title="Top N+1 Query Offenders",
                 columns=["Calls", "Unique Params", "Total ms", "Max ms", "SQL"],
                 rows=n_plus_one_rows,
                 empty_message="No N+1 patterns flagged.",
+                show_tooltips=dashboard_ui.show_column_tooltips,
             ),
         ]
     )
@@ -339,11 +352,21 @@ def _render_severity_chips(report: ProfileReport) -> str:
     )
 
 
+def _render_local_time(value: str) -> str:
+    """Render a UTC timestamp placeholder that is localized in the browser."""
+    escaped = html.escape(value)
+    return (
+        f"<time class=\"js-local-time\" datetime=\"{escaped}\" "
+        f"title=\"UTC: {escaped}\">{escaped}</time>"
+    )
+
+
 def render_reports_dashboard(
     reports: list[ProfileReport],
     selected_report: ProfileReport | None,
     detail_base_path: str,
     clear_path: str,
+    dashboard_ui: DashboardUIConfig | None = None,
 ) -> str:
     """Render list/detail dashboard for all captured reports.
 
@@ -352,10 +375,12 @@ def render_reports_dashboard(
         selected_report: Currently selected report.
         detail_base_path: Base path used for detail links.
         clear_path: API path used to clear all reports.
+        dashboard_ui: Optional UI behavior configuration.
 
     Returns:
         str: Full HTML dashboard.
     """
+    ui = dashboard_ui if dashboard_ui is not None else DashboardUIConfig()
     selected_id = selected_report.id if selected_report is not None else ""
     escaped_base_path = html.escape(detail_base_path)
     escaped_clear_path = html.escape(clear_path)
@@ -365,14 +390,17 @@ def render_reports_dashboard(
         escaped_id = html.escape(report.id)
         escaped_method = html.escape(report.method)
         escaped_path = html.escape(report.path)
-        escaped_created_at = html.escape(report.created_at)
-        noise_class = " is-noise" if report.path == "/favicon.ico" else ""
+        noise_class = (
+            " is-noise"
+            if ui.dim_favicon_requests and report.path == "/favicon.ico"
+            else ""
+        )
         list_items.append(
             f"<a class=\"report-item {active_class}{noise_class}\" "
             f"href=\"{escaped_base_path}?report_id={escaped_id}\">"
             f"<div class=\"request\">{escaped_method} {escaped_path}</div>"
             f"<div class=\"meta\">{report.status_code} · {report.duration_ms:.2f} ms"
-            f" · {escaped_created_at}</div></a>"
+            f" · {_render_local_time(report.created_at)}</div></a>"
         )
     report_list_html = (
         "".join(list_items)
@@ -385,12 +413,14 @@ def render_reports_dashboard(
     else:
         selected_method = html.escape(selected_report.method)
         selected_path = html.escape(selected_report.path)
-        selected_created_at = html.escape(selected_report.created_at)
+        selected_created_at = _render_local_time(selected_report.created_at)
         query_rows = []
         for index, query in enumerate(selected_report.sql_queries, start=1):
             escaped_statement = html.escape(query.statement)
             escaped_params = html.escape(query.params)
-            escaped_short_statement = html.escape(_short_sql(query.statement, max_len=120))
+            escaped_short_statement = html.escape(
+                _short_sql(query.statement, max_len=ui.sql_preview_max_length)
+            )
             escaped_explain = "<br>".join(html.escape(line) for line in query.explain_plan)
             flags = []
             if query.is_critical:
@@ -434,9 +464,8 @@ def render_reports_dashboard(
                 f"<td><code>{escaped_explain or '-'}</code></td>"
                 "</tr>"
             )
-        queries_table = (
-            (
-                "<table><thead><tr>"
+        if ui.show_column_tooltips:
+            timeline_headers = (
                 "<th><span title=\"Execution sequence index within this request.\">Step</span></th>"
                 "<th><span title=\"Execution time for this SQL statement in milliseconds.\">"
                 "Time (ms)</span></th>"
@@ -447,8 +476,17 @@ def render_reports_dashboard(
                 "SQL</span></th>"
                 "<th><span title=\"Captured query parameters.\">Params</span></th>"
                 "<th><span title=\"EXPLAIN QUERY PLAN rows when enabled.\">EXPLAIN</span></th>"
-                "</tr></thead><tbody>{rows}</tbody></table>"
-            ).format(rows="".join(query_rows))
+            )
+        else:
+            timeline_headers = (
+                "<th>Step</th><th>Time (ms)</th><th>Rows</th><th>Flags</th>"
+                "<th>SQL</th><th>Params</th><th>EXPLAIN</th>"
+            )
+        queries_table = (
+            ("<table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>").format(
+                headers=timeline_headers,
+                rows="".join(query_rows),
+            )
             if query_rows
             else "<div class=\"empty\">No SQL queries captured for this request.</div>"
         )
@@ -475,7 +513,7 @@ def render_reports_dashboard(
           <div class="metric"><span>N+1 Queries</span>
             <strong>{selected_report.query_analysis.n_plus_one_query_count}</strong></div>
         </div>
-        {_render_query_analysis_groups(selected_report)}
+        {_render_query_analysis_groups(selected_report, ui)}
         <section class="card">
           <h3>SQL Timeline</h3>
           {queries_table}
@@ -497,4 +535,6 @@ def render_reports_dashboard(
         report_list_html=report_list_html,
         details_html=details_html,
         escaped_clear_path=escaped_clear_path,
+        default_requests_collapsed="1" if ui.default_requests_collapsed else "0",
+        default_pyinstrument_expanded="1" if ui.default_pyinstrument_expanded else "0",
     )

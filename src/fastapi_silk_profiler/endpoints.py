@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
+from .config import ProfilerConfig
 from .renderers import (
     render_html_dashboard,
     render_json,
@@ -23,6 +24,7 @@ def register_latest_report_endpoint(
     app: FastAPI,
     store: ReportStore,
     path: str = "/_silk/latest",
+    config: ProfilerConfig | None = None,
 ) -> None:
     """Register an endpoint that returns the latest profile report.
 
@@ -30,6 +32,7 @@ def register_latest_report_endpoint(
         app: FastAPI application.
         store: In-memory report store.
         path: Endpoint path.
+        config: Optional profiler config for dashboard rendering settings.
     """
 
     @app.get(path)
@@ -76,6 +79,7 @@ def register_latest_report_endpoint(
                 selected_report=selected,
                 detail_base_path=reports_path,
                 clear_path=clear_path,
+                dashboard_ui=config.dashboard_ui if config is not None else None,
             )
         )
 

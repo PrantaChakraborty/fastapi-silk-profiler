@@ -13,7 +13,12 @@ uv add fastapi-silk-profiler
 ```python
 from fastapi import FastAPI
 
-from fastapi_silk_profiler import QueryAnalysisConfig, ProfilerConfig, setup_silk_profiler
+from fastapi_silk_profiler import (
+    DashboardUIConfig,
+    ProfilerConfig,
+    QueryAnalysisConfig,
+    setup_silk_profiler,
+)
 
 app = FastAPI()
 setup_silk_profiler(
@@ -27,6 +32,13 @@ setup_silk_profiler(
             duplicate_min_occurrences=2,
             n_plus_one_min_occurrences=3,
             capture_explain=False,  # set True to collect SQLite EXPLAIN QUERY PLAN
+        ),
+        dashboard_ui=DashboardUIConfig(
+            default_requests_collapsed=False,
+            default_pyinstrument_expanded=False,
+            sql_preview_max_length=120,
+            dim_favicon_requests=True,
+            show_column_tooltips=True,
         ),
         exclude_paths=["/docs", "/openapi.json", "/redoc", "/_silk/latest"],
     ),
@@ -74,6 +86,12 @@ Template files (independent from Python logic):
   - `n_plus_one_min_occurrences: int`
   - `capture_explain: bool` (SQLite support currently)
   - `explain_max_statements_per_request: int`
+- `dashboard_ui: DashboardUIConfig`
+  - `default_requests_collapsed: bool`
+  - `default_pyinstrument_expanded: bool`
+  - `sql_preview_max_length: int`
+  - `dim_favicon_requests: bool`
+  - `show_column_tooltips: bool`
 
 Implementation status and phased roadmap:
 

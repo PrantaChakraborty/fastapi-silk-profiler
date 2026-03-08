@@ -21,6 +21,120 @@
   --title: #e2e8f0;
   --accent: #00ffc8;
   --danger: #ff6b6b;
+  --subtitle: #b2c0d6;
+  --meta: #94a3b8;
+  --btn-bg: #2a1218;
+  --btn-border: #5f2532;
+  --btn-text: #fff;
+  --btn-secondary-bg: #0a0a12;
+  --btn-secondary-border: #1a1a2e;
+  --btn-secondary-text: #cbd5e1;
+  --thead-bg: #0f0f1a;
+  --meta-strong: #cbd5e1;
+  --report-hover-border: #2c2c46;
+  --code-color: #a78bfa;
+  --empty-border: #2a2a40;
+  --chip-critical-bg: #3a1111;
+  --chip-critical-border: #7f1d1d;
+  --chip-critical-text: #fecaca;
+  --chip-slow-bg: #3d2f08;
+  --chip-slow-border: #92400e;
+  --chip-slow-text: #fde68a;
+  --chip-nplus1-bg: #3a2104;
+  --chip-nplus1-border: #9a3412;
+  --chip-nplus1-text: #fed7aa;
+  --chip-duplicate-bg: #10243d;
+  --chip-duplicate-border: #1d4ed8;
+  --chip-duplicate-text: #bfdbfe;
+  --timeline-zebra: rgba(255, 255, 255, 0.01);
+  --timeline-critical-bg: rgba(127, 29, 29, 0.24);
+  --timeline-slow-bg: rgba(146, 64, 14, 0.20);
+  --timeline-nplus1-bg: rgba(154, 52, 18, 0.16);
+  --timeline-duplicate-bg: rgba(29, 78, 216, 0.14);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #f5f7fb;
+    --panel: #fff;
+    --panel-2: #f8fafc;
+    --line: #dbe4ee;
+    --muted: #5b6b82;
+    --text: #1f2a37;
+    --title: #0f172a;
+    --accent: #0f766e;
+    --danger: #b91c1c;
+    --subtitle: #334155;
+    --meta: #475569;
+    --btn-bg: #fee2e2;
+    --btn-border: #fca5a5;
+    --btn-text: #7f1d1d;
+    --btn-secondary-bg: #eef2f7;
+    --btn-secondary-border: #cbd5e1;
+    --btn-secondary-text: #0f172a;
+    --thead-bg: #f1f5f9;
+    --meta-strong: #1e293b;
+    --report-hover-border: #94a3b8;
+    --code-color: #7c3aed;
+    --empty-border: #94a3b8;
+    --chip-critical-bg: #fee2e2;
+    --chip-critical-border: #ef4444;
+    --chip-critical-text: #7f1d1d;
+    --chip-slow-bg: #fef3c7;
+    --chip-slow-border: #f59e0b;
+    --chip-slow-text: #78350f;
+    --chip-nplus1-bg: #ffedd5;
+    --chip-nplus1-border: #fb923c;
+    --chip-nplus1-text: #7c2d12;
+    --chip-duplicate-bg: #dbeafe;
+    --chip-duplicate-border: #60a5fa;
+    --chip-duplicate-text: #1e3a8a;
+    --timeline-zebra: rgba(15, 23, 42, 0.03);
+    --timeline-critical-bg: rgba(220, 38, 38, 0.13);
+    --timeline-slow-bg: rgba(245, 158, 11, 0.14);
+    --timeline-nplus1-bg: rgba(249, 115, 22, 0.13);
+    --timeline-duplicate-bg: rgba(59, 130, 246, 0.13);
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f5f7fb;
+  --panel: #fff;
+  --panel-2: #f8fafc;
+  --line: #dbe4ee;
+  --muted: #5b6b82;
+  --text: #1f2a37;
+  --title: #0f172a;
+  --accent: #0f766e;
+  --danger: #b91c1c;
+  --subtitle: #334155;
+  --meta: #475569;
+  --btn-bg: #fee2e2;
+  --btn-border: #fca5a5;
+  --btn-text: #7f1d1d;
+  --btn-secondary-bg: #eef2f7;
+  --btn-secondary-border: #cbd5e1;
+  --btn-secondary-text: #0f172a;
+  --thead-bg: #f1f5f9;
+  --meta-strong: #1e293b;
+  --report-hover-border: #94a3b8;
+  --code-color: #7c3aed;
+  --empty-border: #94a3b8;
+  --chip-critical-bg: #fee2e2;
+  --chip-critical-border: #ef4444;
+  --chip-critical-text: #7f1d1d;
+  --chip-slow-bg: #fef3c7;
+  --chip-slow-border: #f59e0b;
+  --chip-slow-text: #78350f;
+  --chip-nplus1-bg: #ffedd5;
+  --chip-nplus1-border: #fb923c;
+  --chip-nplus1-text: #7c2d12;
+  --chip-duplicate-bg: #dbeafe;
+  --chip-duplicate-border: #60a5fa;
+  --chip-duplicate-text: #1e3a8a;
+  --timeline-zebra: rgba(15, 23, 42, 0.03);
+  --timeline-critical-bg: rgba(220, 38, 38, 0.13);
+  --timeline-slow-bg: rgba(245, 158, 11, 0.14);
+  --timeline-nplus1-bg: rgba(249, 115, 22, 0.13);
+  --timeline-duplicate-bg: rgba(59, 130, 246, 0.13);
 }
 * { box-sizing: border-box; }
 body {
@@ -40,7 +154,7 @@ body {
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px; }
 h1 { margin: 0; color: var(--title); }
-.subtitle { margin: 4px 0 0; color: #b2c0d6; }
+.subtitle { margin: 4px 0 0; color: var(--subtitle); }
 .kicker {
   color: var(--muted);
   letter-spacing: 3px;
@@ -48,19 +162,19 @@ h1 { margin: 0; color: var(--title); }
   margin-bottom: 6px;
 }
 button {
-  border: 1px solid #5f2532;
+  border: 1px solid var(--btn-border);
   border-radius: 6px;
-  background: #2a1218;
-  color: #fff;
+  background: var(--btn-bg);
+  color: var(--btn-text);
   padding: 9px 12px;
   font-weight: 600;
   cursor: pointer;
 }
 button:hover { filter: brightness(1.1); }
 .btn-secondary {
-  border-color: var(--line);
-  background: var(--panel-2);
-  color: var(--text);
+  border-color: var(--btn-secondary-border);
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
 }
 .modal {
   position: fixed;
@@ -88,7 +202,7 @@ button:hover { filter: brightness(1.1); }
 }
 .modal-copy {
   margin: 0;
-  color: #94a3b8;
+  color: var(--meta);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -131,10 +245,10 @@ button:hover { filter: brightness(1.1); }
   margin-bottom: 8px;
   background: var(--panel-2);
 }
-.report-item:hover { border-color: #2c2c46; }
+.report-item:hover { border-color: var(--report-hover-border); }
 .report-item.active { border-color: var(--accent); }
 .request { font-weight: 600; margin-bottom: 4px; color: var(--title); }
-.meta { color: #94a3b8; font-size: 11px; }
+.meta { color: var(--meta); font-size: 11px; }
 .icon-btn {
   min-width: 116px;
   padding: 7px 10px;
@@ -159,15 +273,31 @@ button:hover { filter: brightness(1.1); }
   font-size: 11px;
   letter-spacing: 0.2px;
 }
-.chip-critical, .badge-critical { background: #3a1111; border-color: #7f1d1d; color: #fecaca; }
-.chip-slow, .badge-slow { background: #3d2f08; border-color: #92400e; color: #fde68a; }
-.chip-nplus1, .badge-nplus1 { background: #3a2104; border-color: #9a3412; color: #fed7aa; }
-.badge-duplicate { background: #10243d; border-color: #1d4ed8; color: #bfdbfe; }
+.chip-critical, .badge-critical {
+  background: var(--chip-critical-bg);
+  border-color: var(--chip-critical-border);
+  color: var(--chip-critical-text);
+}
+.chip-slow, .badge-slow {
+  background: var(--chip-slow-bg);
+  border-color: var(--chip-slow-border);
+  color: var(--chip-slow-text);
+}
+.chip-nplus1, .badge-nplus1 {
+  background: var(--chip-nplus1-bg);
+  border-color: var(--chip-nplus1-border);
+  color: var(--chip-nplus1-text);
+}
+.badge-duplicate {
+  background: var(--chip-duplicate-bg);
+  border-color: var(--chip-duplicate-border);
+  color: var(--chip-duplicate-text);
+}
 .meta-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  color: #94a3b8;
+  color: var(--meta);
   font-size: 12px;
   margin-bottom: 8px;
 }
@@ -180,11 +310,11 @@ button:hover { filter: brightness(1.1); }
   margin-right: 4px;
 }
 .is-noise { opacity: 0.6; }
-.timeline-row:nth-child(odd) { background: rgba(255, 255, 255, 0.01); }
-.timeline-row.is-critical { background: rgba(127, 29, 29, 0.24); }
-.timeline-row.is-slow { background: rgba(146, 64, 14, 0.20); }
-.timeline-row.is-nplus1 { background: rgba(154, 52, 18, 0.16); }
-.timeline-row.is-duplicate { background: rgba(29, 78, 216, 0.14); }
+.timeline-row:nth-child(odd) { background: var(--timeline-zebra); }
+.timeline-row.is-critical { background: var(--timeline-critical-bg); }
+.timeline-row.is-slow { background: var(--timeline-slow-bg); }
+.timeline-row.is-nplus1 { background: var(--timeline-nplus1-bg); }
+.timeline-row.is-duplicate { background: var(--timeline-duplicate-bg); }
 #toggle-requests-btn-collapsed { display: none; margin-bottom: 10px; }
 .layout.requests-collapsed #toggle-requests-btn-collapsed { display: inline-flex; }
 .sql-detail summary {
@@ -210,7 +340,7 @@ button:hover { filter: brightness(1.1); }
 h3 { margin: 0 0 8px; color: var(--accent); font-size: 13px; letter-spacing: 1px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { border: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
-thead th { background: #0f0f1a; color: #94a3b8; font-size: 11px; }
+thead th { background: var(--thead-bg); color: var(--meta); font-size: 11px; }
 pre {
   white-space: pre-wrap;
   background: var(--panel-2);
@@ -221,12 +351,12 @@ pre {
   font-size: 12px;
   line-height: 1.6;
 }
-code { color: #a78bfa; }
+code { color: var(--code-color); }
 .empty {
-  border: 1px dashed #2a2a40;
+  border: 1px dashed var(--empty-border);
   border-radius: 6px;
   padding: 12px;
-  color: #94a3b8;
+  color: var(--meta);
 }
 @media (max-width: 960px) {
   .layout { grid-template-columns: 1fr; }
@@ -245,6 +375,7 @@ code { color: #a78bfa; }
         </p>
       </div>
       <div class="toolbar">
+        <button id="theme-toggle-btn" class="btn-secondary" type="button">Theme</button>
         <div class="legend">
           <span class="badge badge-critical">critical</span>
           <span class="badge badge-slow">warning</span>
@@ -325,8 +456,62 @@ const pyinstrumentTemplate = document.getElementById("pyinstrument-template");
 const dashboardLayout = document.getElementById("dashboard-layout");
 const toggleRequestsBtn = document.getElementById("toggle-requests-btn");
 const toggleRequestsBtnCollapsed = document.getElementById("toggle-requests-btn-collapsed");
+const themeToggleBtn = document.getElementById("theme-toggle-btn");
+const defaultRequestsCollapsed = "$default_requests_collapsed" === "1";
+const defaultPyinstrumentExpanded = "$default_pyinstrument_expanded" === "1";
 
 const REQUESTS_COLLAPSED_KEY = "silk.requests.collapsed";
+const PYINSTRUMENT_EXPANDED_KEY = "silk.pyinstrument.expanded";
+const THEME_KEY = "silk.theme";
+
+const systemTheme = () =>
+  window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+
+const currentTheme = () => window.localStorage.getItem(THEME_KEY) || systemTheme();
+
+const applyTheme = (theme) => {
+  document.documentElement.setAttribute("data-theme", theme);
+  if (themeToggleBtn) {
+    themeToggleBtn.textContent = "Theme: " + (theme === "dark" ? "Dark" : "Light");
+  }
+};
+
+const toggleTheme = () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  window.localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+};
+
+applyTheme(currentTheme());
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (window.localStorage.getItem(THEME_KEY)) return;
+  applyTheme(systemTheme());
+});
+themeToggleBtn?.addEventListener("click", toggleTheme);
+
+const formatLocalTimes = () => {
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  });
+  document.querySelectorAll(".js-local-time").forEach((element) => {
+    if (!(element instanceof HTMLTimeElement)) return;
+    const value = element.getAttribute("datetime");
+    if (!value) return;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return;
+    element.textContent = formatter.format(parsed);
+  });
+};
+
+formatLocalTimes();
+
 const updateRequestsToggleLabel = () => {
   if (!dashboardLayout || !toggleRequestsBtn) return;
   const collapsed = dashboardLayout.classList.contains("requests-collapsed");
@@ -335,8 +520,13 @@ const updateRequestsToggleLabel = () => {
   toggleRequestsBtn.setAttribute("aria-label", toggleRequestsBtn.title);
 };
 
-if (dashboardLayout && window.localStorage.getItem(REQUESTS_COLLAPSED_KEY) === "1") {
-  dashboardLayout.classList.add("requests-collapsed");
+if (dashboardLayout) {
+  const savedRequestState = window.localStorage.getItem(REQUESTS_COLLAPSED_KEY);
+  const shouldCollapseRequests =
+    savedRequestState === null ? defaultRequestsCollapsed : savedRequestState === "1";
+  if (shouldCollapseRequests) {
+    dashboardLayout.classList.add("requests-collapsed");
+  }
   updateRequestsToggleLabel();
 }
 
@@ -360,11 +550,22 @@ togglePyinstrumentBtn?.addEventListener("click", () => {
     }
     pyinstrumentPanel.removeAttribute("hidden");
     togglePyinstrumentBtn.textContent = "Hide Pyinstrument Trace";
+    window.localStorage.setItem(PYINSTRUMENT_EXPANDED_KEY, "1");
     return;
   }
   pyinstrumentPanel.setAttribute("hidden", "");
   togglePyinstrumentBtn.textContent = "Show Pyinstrument Trace";
+  window.localStorage.setItem(PYINSTRUMENT_EXPANDED_KEY, "0");
 });
+
+if (togglePyinstrumentBtn && pyinstrumentPanel) {
+  const savedPyinstrumentState = window.localStorage.getItem(PYINSTRUMENT_EXPANDED_KEY);
+  const shouldExpandPyinstrument =
+    savedPyinstrumentState === null ? defaultPyinstrumentExpanded : savedPyinstrumentState === "1";
+  if (shouldExpandPyinstrument) {
+    togglePyinstrumentBtn.click();
+  }
+}
 </script>
 </body>
 </html>

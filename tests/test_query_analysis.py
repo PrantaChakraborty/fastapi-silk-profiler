@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from fastapi_silk_profiler.config import DashboardUIConfig
 from fastapi_silk_profiler.models import ProfileReport, SQLQueryRecord
 from fastapi_silk_profiler.query_analysis import QueryAnalysisConfig, analyze_queries, normalize_sql
 from fastapi_silk_profiler.renderers import render_reports_dashboard, render_text
@@ -194,3 +195,41 @@ def test_after_cursor_execute_returns_when_capture_not_started() -> None:
         context=object(),
         executemany=False,
     )
+
+
+def test_reports_dashboard_respects_ui_config() -> None:
+    report = ProfileReport(
+        method="GET",
+        path="/favicon.ico",
+        status_code=404,
+        duration_ms=12,
+        sql_queries=[
+            SQLQueryRecord(
+                statement="SELECT very_long_column_name FROM some_table WHERE id = 1 "
+                "AND another_column = 'value' AND a_third_column = 'value'",
+                params="{}",
+                duration_ms=1,
+                rowcount=1,
+            )
+        ],
+    )
+    payload = render_reports_dashboard(
+        reports=[report],
+        selected_report=report,
+        detail_base_path="/_silk/reports",
+        clear_path="/_silk/reports/clear",
+        dashboard_ui=DashboardUIConfig(
+            default_requests_collapsed=True,
+            default_pyinstrument_expanded=True,
+            sql_preview_max_length=20,
+            dim_favicon_requests=False,
+            show_column_tooltips=False,
+        ),
+    )
+
+    assert "$default_requests_collapsed" not in payload
+    assert "$default_pyinstrument_expanded" not in payload
+    assert "title=\"Execution sequence index within this request.\"" not in payload
+    assert "report-item active is-noise" not in payload
+    assert "sql-detail" in payload
+    assert "sql-preview" in payload

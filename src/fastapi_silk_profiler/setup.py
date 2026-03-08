@@ -50,6 +50,11 @@ def setup_silk_profiler(
         for excluded_path in endpoint_exclusions:
             if excluded_path not in active_config.exclude_paths:
                 active_config.exclude_paths.append(excluded_path)
-        register_latest_report_endpoint(app, active_store, path=endpoint_path)
+        register_latest_report_endpoint(
+            app,
+            active_store,
+            path=endpoint_path,
+            config=active_config,
+        )
     app.add_middleware(SilkProfilerMiddleware, config=active_config, store=active_store)
     return active_store

@@ -13,6 +13,8 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 - Query analysis engine with per-request DB summary metrics (`total_db_time_ms`, `db_time_ratio`).
 - Slow/duplicate/N+1 SQL heuristics and per-query flags in JSON/text/dashboard views.
 - Optional SQLite `EXPLAIN QUERY PLAN` capture with request-level cap.
+- Configurable dashboard UI settings via `DashboardUIConfig` (request panel default state,
+  pyinstrument default state, SQL preview length, favicon dimming, tooltip toggles).
 
 ### Changed
 - `setup_silk_profiler` now supports `sqlite_db_path`.
