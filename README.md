@@ -69,6 +69,7 @@ Template files (independent from Python logic):
 - `query_analysis: QueryAnalysisConfig`
   - `enabled: bool`
   - `slow_query_threshold_ms: float`
+  - `critical_query_threshold_ms: float | None` (`None` = `5x` slow threshold)
   - `duplicate_min_occurrences: int`
   - `n_plus_one_min_occurrences: int`
   - `capture_explain: bool` (SQLite support currently)

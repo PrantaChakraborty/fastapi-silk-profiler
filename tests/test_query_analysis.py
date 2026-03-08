@@ -131,7 +131,9 @@ def test_renderers_include_query_analysis_flags_and_explain() -> None:
     assert "EXPLAIN: SCAN items" in text_payload
     assert "Flags" in html_payload
     assert "EXPLAIN" in html_payload
-    assert "slow, duplicate, n+1" in html_payload
+    assert "badge-slow" in html_payload
+    assert "badge-duplicate" in html_payload
+    assert "badge-nplus1" in html_payload
     assert "Top Slow Query Offenders" in html_payload
     assert "Top Duplicate Query Offenders" in html_payload
     assert "Top N+1 Query Offenders" in html_payload

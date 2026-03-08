@@ -19,6 +19,7 @@ class QueryAnalysisConfig:
 
     enabled: bool = True
     slow_query_threshold_ms: float = 100.0
+    critical_query_threshold_ms: float | None = None
     duplicate_min_occurrences: int = 2
     n_plus_one_min_occurrences: int = 3
     capture_explain: bool = False
@@ -61,12 +62,16 @@ def analyze_queries(
     if not config.enabled or not queries:
         return summary
 
-    normalized_sql: list[str] = []
+    critical_threshold = (
+        config.critical_query_threshold_ms
+        if config.critical_query_threshold_ms is not None
+        else config.slow_query_threshold_ms * 5
+    )
     for query in queries:
         normalized = normalize_sql(query.statement)
         query.normalized_statement = normalized
-        normalized_sql.append(normalized)
         query.is_slow = query.duration_ms >= config.slow_query_threshold_ms
+        query.is_critical = query.duration_ms >= critical_threshold
 
     same_signature_counter = Counter((q.normalized_statement, q.params) for q in queries)
     duplicate_groups = {
@@ -96,6 +101,7 @@ def analyze_queries(
             queries[index].is_n_plus_one = True
 
     summary.slow_query_count = sum(1 for query in queries if query.is_slow)
+    summary.critical_query_count = sum(1 for query in queries if query.is_critical)
     summary.duplicate_query_count = sum(1 for query in queries if query.is_duplicate)
     summary.n_plus_one_query_count = sum(1 for query in queries if query.is_n_plus_one)
     summary.duplicate_query_groups = len(duplicate_groups)

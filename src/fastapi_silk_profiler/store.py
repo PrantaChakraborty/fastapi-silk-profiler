@@ -30,6 +30,7 @@ def _sql_rows_to_records(rows: Sequence[sqlite3.Row]) -> list[SQLQueryRecord]:
             rowcount=int(row["rowcount"]) if row["rowcount"] is not None else None,
             normalized_statement=str(row["normalized_statement"] or ""),
             is_slow=bool(row["is_slow"]),
+            is_critical=bool(row["is_critical"]),
             is_duplicate=bool(row["is_duplicate"]),
             is_n_plus_one=bool(row["is_n_plus_one"]),
             explain_plan=json.loads(str(row["explain_plan"] or "[]")),
@@ -165,6 +166,7 @@ class SQLiteReportStore:
                     rowcount INTEGER,
                     normalized_statement TEXT NOT NULL DEFAULT '',
                     is_slow INTEGER NOT NULL DEFAULT 0,
+                    is_critical INTEGER NOT NULL DEFAULT 0,
                     is_duplicate INTEGER NOT NULL DEFAULT 0,
                     is_n_plus_one INTEGER NOT NULL DEFAULT 0,
                     explain_plan TEXT NOT NULL DEFAULT '[]',
@@ -196,6 +198,12 @@ class SQLiteReportStore:
             self._ensure_column(
                 table="sql_queries",
                 column="is_duplicate",
+                sql_type="INTEGER",
+                default_sql="0",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="is_critical",
                 sql_type="INTEGER",
                 default_sql="0",
             )
@@ -243,9 +251,10 @@ class SQLiteReportStore:
                 """
                 INSERT INTO sql_queries (
                     report_id, position, statement, params, duration_ms, rowcount,
-                    normalized_statement, is_slow, is_duplicate, is_n_plus_one, explain_plan
+                    normalized_statement, is_slow, is_critical,
+                    is_duplicate, is_n_plus_one, explain_plan
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -257,6 +266,7 @@ class SQLiteReportStore:
                         query.rowcount,
                         query.normalized_statement,
                         int(query.is_slow),
+                        int(query.is_critical),
                         int(query.is_duplicate),
                         int(query.is_n_plus_one),
                         json.dumps(query.explain_plan),
@@ -374,7 +384,8 @@ class SQLiteReportStore:
         sql_rows = self._conn.execute(
             """
             SELECT statement, params, duration_ms, rowcount
-                   ,normalized_statement, is_slow, is_duplicate, is_n_plus_one, explain_plan
+                   ,normalized_statement, is_slow, is_critical
+                   ,is_duplicate, is_n_plus_one, explain_plan
             FROM sql_queries
             WHERE report_id = ?
             ORDER BY position ASC

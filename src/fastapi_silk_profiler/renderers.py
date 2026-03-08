@@ -63,11 +63,14 @@ def render_text(report: ProfileReport) -> str:
         f"Total DB Time: {report.query_analysis.total_db_time_ms:.2f} ms",
         f"DB Time Ratio: {report.query_analysis.db_time_ratio:.2%}",
         f"Slow Queries: {report.query_analysis.slow_query_count}",
+        f"Critical Queries: {report.query_analysis.critical_query_count}",
         f"Duplicate Queries: {report.query_analysis.duplicate_query_count}",
         f"N+1 Queries: {report.query_analysis.n_plus_one_query_count}",
     ]
     for index, query in enumerate(report.sql_queries, start=1):
         flags = []
+        if query.is_critical:
+            flags.append("critical")
         if query.is_slow:
             flags.append("slow")
         if query.is_duplicate:
@@ -120,6 +123,7 @@ def render_html_dashboard(report: ProfileReport) -> str:
                     "rowcount": query.rowcount,
                     "normalized_statement": query.normalized_statement,
                     "is_slow": query.is_slow,
+                    "is_critical": query.is_critical,
                     "is_duplicate": query.is_duplicate,
                     "is_n_plus_one": query.is_n_plus_one,
                     "explain_plan": query.explain_plan,
@@ -186,12 +190,25 @@ def _render_group_card(
     empty_message: str,
 ) -> str:
     """Render one query-analysis group card."""
+    tooltip_by_column = {
+        "Calls": "How many times this query pattern appeared in the request.",
+        "Total ms": "Total cumulative database time spent in this query pattern.",
+        "Max ms": "Slowest single execution time for this query pattern.",
+        "SQL": "Representative SQL statement for this group (truncated).",
+        "Unique Params": "How many distinct parameter sets were used for this pattern.",
+    }
     if not rows:
         return (
             f"<section class=\"card\"><h3>{html.escape(title)}</h3>"
             f"<div class=\"empty\">{html.escape(empty_message)}</div></section>"
         )
-    headers = "".join(f"<th>{html.escape(column)}</th>" for column in columns)
+    headers = "".join(
+        (
+            f"<th><span title=\"{html.escape(tooltip_by_column.get(column, column))}\">"
+            f"{html.escape(column)}</span></th>"
+        )
+        for column in columns
+    )
     body_rows = []
     for row in rows:
         cells = "".join(f"<td>{html.escape(cell)}</td>" for cell in row)
@@ -300,6 +317,28 @@ def _render_query_analysis_groups(report: ProfileReport) -> str:
     )
 
 
+def _render_severity_chips(report: ProfileReport) -> str:
+    """Render one-line severity chips for fast triage."""
+    chips = [
+        (
+            "critical",
+            f"{report.query_analysis.critical_query_count} critical",
+        ),
+        (
+            "slow",
+            f"{report.query_analysis.slow_query_count} warnings",
+        ),
+        (
+            "nplus1",
+            f"{report.query_analysis.n_plus_one_query_count} n+1",
+        ),
+    ]
+    return "".join(
+        f"<span class=\"chip chip-{name}\">{html.escape(label)}</span>"
+        for name, label in chips
+    )
+
+
 def render_reports_dashboard(
     reports: list[ProfileReport],
     selected_report: ProfileReport | None,
@@ -327,8 +366,9 @@ def render_reports_dashboard(
         escaped_method = html.escape(report.method)
         escaped_path = html.escape(report.path)
         escaped_created_at = html.escape(report.created_at)
+        noise_class = " is-noise" if report.path == "/favicon.ico" else ""
         list_items.append(
-            f"<a class=\"report-item {active_class}\" "
+            f"<a class=\"report-item {active_class}{noise_class}\" "
             f"href=\"{escaped_base_path}?report_id={escaped_id}\">"
             f"<div class=\"request\">{escaped_method} {escaped_path}</div>"
             f"<div class=\"meta\">{report.status_code} · {report.duration_ms:.2f} ms"
@@ -350,46 +390,80 @@ def render_reports_dashboard(
         for index, query in enumerate(selected_report.sql_queries, start=1):
             escaped_statement = html.escape(query.statement)
             escaped_params = html.escape(query.params)
+            escaped_short_statement = html.escape(_short_sql(query.statement, max_len=120))
             escaped_explain = "<br>".join(html.escape(line) for line in query.explain_plan)
             flags = []
+            if query.is_critical:
+                flags.append("<span class=\"badge badge-critical\">critical</span>")
             if query.is_slow:
-                flags.append("slow")
+                flags.append("<span class=\"badge badge-slow\">slow</span>")
             if query.is_duplicate:
-                flags.append("duplicate")
+                flags.append("<span class=\"badge badge-duplicate\">duplicate</span>")
             if query.is_n_plus_one:
-                flags.append("n+1")
-            flags_text = ", ".join(flags) if flags else "-"
+                flags.append("<span class=\"badge badge-nplus1\">n+1</span>")
+            flags_text = " ".join(flags) if flags else "-"
             rowcount_value = "-" if query.rowcount is None else str(query.rowcount)
+            if escaped_short_statement != escaped_statement:
+                sql_cell_html = (
+                    "<details class=\"sql-detail\">"
+                    "<summary>"
+                    f"<code class=\"sql-preview\">{escaped_short_statement}</code>"
+                    "</summary>"
+                    f"<code class=\"sql-full\">{escaped_statement}</code>"
+                    "</details>"
+                )
+            else:
+                sql_cell_html = f"<code class=\"sql-preview\">{escaped_statement}</code>"
+            row_class = "timeline-row"
+            if query.is_critical:
+                row_class += " is-critical"
+            elif query.is_slow:
+                row_class += " is-slow"
+            elif query.is_n_plus_one:
+                row_class += " is-nplus1"
+            elif query.is_duplicate:
+                row_class += " is-duplicate"
             query_rows.append(
-                "<tr>"
+                f"<tr class=\"{row_class}\">"
                 f"<td>{index}</td>"
                 f"<td>{query.duration_ms:.2f}</td>"
                 f"<td>{rowcount_value}</td>"
                 f"<td>{flags_text}</td>"
-                f"<td><code>{escaped_statement}</code></td>"
+                f"<td>{sql_cell_html}</td>"
                 f"<td><code>{escaped_params}</code></td>"
                 f"<td><code>{escaped_explain or '-'}</code></td>"
                 "</tr>"
             )
         queries_table = (
             (
-                "<table><thead><tr><th>Step</th><th>Time (ms)</th><th>Rows</th>"
-                "<th>Flags</th><th>SQL</th><th>Params</th><th>EXPLAIN</th>"
+                "<table><thead><tr>"
+                "<th><span title=\"Execution sequence index within this request.\">Step</span></th>"
+                "<th><span title=\"Execution time for this SQL statement in milliseconds.\">"
+                "Time (ms)</span></th>"
+                "<th><span title=\"Row count reported by driver; -1 often means not provided.\">"
+                "Rows</span></th>"
+                "<th><span title=\"Detected analysis tags for this query.\">Flags</span></th>"
+                "<th><span title=\"Captured SQL statement (click to expand when trimmed).\">"
+                "SQL</span></th>"
+                "<th><span title=\"Captured query parameters.\">Params</span></th>"
+                "<th><span title=\"EXPLAIN QUERY PLAN rows when enabled.\">EXPLAIN</span></th>"
                 "</tr></thead><tbody>{rows}</tbody></table>"
             ).format(rows="".join(query_rows))
             if query_rows
             else "<div class=\"empty\">No SQL queries captured for this request.</div>"
         )
         details_html = f"""
+        <div class="meta-strip">
+          <span><strong>{selected_method}</strong> {selected_path}</span>
+          <span>Status: <strong>{selected_report.status_code}</strong></span>
+          <span>Captured: <strong>{selected_created_at}</strong></span>
+        </div>
+        <div class="chip-row">
+          {_render_severity_chips(selected_report)}
+        </div>
         <div class="summary-grid">
-          <div class="metric"><span>Method</span><strong>{selected_method}</strong></div>
-          <div class="metric"><span>Path</span><strong>{selected_path}</strong></div>
-          <div class="metric"><span>Status</span>
-            <strong>{selected_report.status_code}</strong></div>
           <div class="metric"><span>Total Time</span>
             <strong>{selected_report.duration_ms:.2f} ms</strong></div>
-          <div class="metric"><span>SQL Count</span>
-            <strong>{len(selected_report.sql_queries)}</strong></div>
           <div class="metric"><span>Total DB Time</span>
             <strong>{selected_report.query_analysis.total_db_time_ms:.2f} ms</strong></div>
           <div class="metric"><span>DB Time Ratio</span>
@@ -400,7 +474,6 @@ def render_reports_dashboard(
             <strong>{selected_report.query_analysis.duplicate_query_count}</strong></div>
           <div class="metric"><span>N+1 Queries</span>
             <strong>{selected_report.query_analysis.n_plus_one_query_count}</strong></div>
-          <div class="metric"><span>Captured At</span><strong>{selected_created_at}</strong></div>
         </div>
         {_render_query_analysis_groups(selected_report)}
         <section class="card">
@@ -408,8 +481,14 @@ def render_reports_dashboard(
           {queries_table}
         </section>
         <section class="card">
-          <h3>Pyinstrument (Text)</h3>
-          <pre>{html.escape(selected_report.pyinstrument_text)}</pre>
+          <h3>Pyinstrument</h3>
+          <button id="toggle-pyinstrument-btn" class="btn-secondary" type="button">
+            Show Pyinstrument Trace
+          </button>
+          <div id="pyinstrument-panel" hidden></div>
+          <template id="pyinstrument-template">
+            <pre>{html.escape(selected_report.pyinstrument_text)}</pre>
+          </template>
         </section>
         """
 

@@ -18,6 +18,7 @@ class SQLQueryRecord:
     rowcount: int | None
     normalized_statement: str = ""
     is_slow: bool = False
+    is_critical: bool = False
     is_duplicate: bool = False
     is_n_plus_one: bool = False
     explain_plan: list[str] = field(default_factory=list)
@@ -30,6 +31,7 @@ class QueryAnalysisSummary:
     total_db_time_ms: float = 0.0
     db_time_ratio: float = 0.0
     slow_query_count: int = 0
+    critical_query_count: int = 0
     duplicate_query_count: int = 0
     duplicate_query_groups: int = 0
     n_plus_one_query_count: int = 0

@@ -16,7 +16,7 @@
   --panel: #0c0c18;
   --panel-2: #0a0a12;
   --line: #1a1a2e;
-  --muted: #4a4a6a;
+  --muted: #7c8aa5;
   --text: #cbd5e1;
   --title: #e2e8f0;
   --accent: #00ffc8;
@@ -29,7 +29,7 @@ body {
   background: var(--bg);
   color: var(--text);
 }
-.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+.container { width: 100%; max-width: none; margin: 0; padding: clamp(14px, 2vw, 24px); }
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -37,8 +37,10 @@ body {
   gap: 12px;
   margin-bottom: 14px;
 }
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; }
 h1 { margin: 0; color: var(--title); }
-.subtitle { margin: 4px 0 0; color: #94a3b8; }
+.subtitle { margin: 4px 0 0; color: #b2c0d6; }
 .kicker {
   color: var(--muted);
   letter-spacing: 3px;
@@ -101,6 +103,8 @@ button:hover { filter: brightness(1.1); }
   grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
   gap: 14px;
 }
+.layout.requests-collapsed { grid-template-columns: minmax(0, 1fr); }
+.layout.requests-collapsed #requests-panel { display: none; }
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -108,6 +112,14 @@ button:hover { filter: brightness(1.1); }
   padding: 14px;
 }
 .panel-title { margin: 0 0 10px; color: var(--accent); font-size: 14px; letter-spacing: 1px; }
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.panel-title-tight { margin: 0; color: var(--accent); font-size: 14px; letter-spacing: 1px; }
 .list { max-height: 78vh; overflow-y: auto; }
 .report-item {
   display: block;
@@ -123,9 +135,13 @@ button:hover { filter: brightness(1.1); }
 .report-item.active { border-color: var(--accent); }
 .request { font-weight: 600; margin-bottom: 4px; color: var(--title); }
 .meta { color: #94a3b8; font-size: 11px; }
+.icon-btn {
+  min-width: 116px;
+  padding: 7px 10px;
+}
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
   gap: 10px;
 }
 .metric {
@@ -133,6 +149,61 @@ button:hover { filter: brightness(1.1); }
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
+}
+.chip-row { margin: 8px 0 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  letter-spacing: 0.2px;
+}
+.chip-critical, .badge-critical { background: #3a1111; border-color: #7f1d1d; color: #fecaca; }
+.chip-slow, .badge-slow { background: #3d2f08; border-color: #92400e; color: #fde68a; }
+.chip-nplus1, .badge-nplus1 { background: #3a2104; border-color: #9a3412; color: #fed7aa; }
+.badge-duplicate { background: #10243d; border-color: #1d4ed8; color: #bfdbfe; }
+.meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #94a3b8;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+.badge {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  margin-right: 4px;
+}
+.is-noise { opacity: 0.6; }
+.timeline-row:nth-child(odd) { background: rgba(255, 255, 255, 0.01); }
+.timeline-row.is-critical { background: rgba(127, 29, 29, 0.24); }
+.timeline-row.is-slow { background: rgba(146, 64, 14, 0.20); }
+.timeline-row.is-nplus1 { background: rgba(154, 52, 18, 0.16); }
+.timeline-row.is-duplicate { background: rgba(29, 78, 216, 0.14); }
+#toggle-requests-btn-collapsed { display: none; margin-bottom: 10px; }
+.layout.requests-collapsed #toggle-requests-btn-collapsed { display: inline-flex; }
+.sql-detail summary {
+  cursor: pointer;
+  list-style: none;
+}
+.sql-detail summary::-webkit-details-marker { display: none; }
+.sql-preview {
+  display: block;
+  max-width: 560px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sql-full {
+  display: block;
+  margin-top: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .metric span { color: var(--muted); font-size: 11px; }
 .metric strong { display: block; margin-top: 6px; word-break: break-word; color: var(--title); }
@@ -173,14 +244,28 @@ code { color: #a78bfa; }
           Database profiling dashboard: request list, SQL timeline, pyinstrument.
         </p>
       </div>
-      <button id="clear-btn" type="button">Clear All Logs</button>
+      <div class="toolbar">
+        <div class="legend">
+          <span class="badge badge-critical">critical</span>
+          <span class="badge badge-slow">warning</span>
+          <span class="badge badge-nplus1">n+1</span>
+          <span class="badge badge-duplicate">duplicate</span>
+        </div>
+        <button id="clear-btn" type="button">Clear All Logs</button>
+      </div>
     </div>
-    <div class="layout">
-      <section class="card">
-        <h2 class="panel-title">Captured Requests ($report_count)</h2>
+    <div id="dashboard-layout" class="layout">
+      <section id="requests-panel" class="card">
+        <div class="panel-header">
+          <h2 class="panel-title-tight">Captured Requests ($report_count)</h2>
+          <button id="toggle-requests-btn" class="btn-secondary icon-btn" type="button"
+            title="Collapse request list" aria-label="Collapse request list">Hide Requests</button>
+        </div>
         <div class="list">$report_list_html</div>
       </section>
       <section class="card">
+        <button id="toggle-requests-btn-collapsed" class="btn-secondary icon-btn" type="button"
+          title="Expand request list" aria-label="Expand request list">Show Requests</button>
         <h2 class="panel-title">Request Details</h2>
         $details_html
       </section>
@@ -232,6 +317,53 @@ modalConfirmBtn?.addEventListener("click", async () => {
   }
   hideModal();
   window.alert("Failed to clear logs. Please try again.");
+});
+
+const togglePyinstrumentBtn = document.getElementById("toggle-pyinstrument-btn");
+const pyinstrumentPanel = document.getElementById("pyinstrument-panel");
+const pyinstrumentTemplate = document.getElementById("pyinstrument-template");
+const dashboardLayout = document.getElementById("dashboard-layout");
+const toggleRequestsBtn = document.getElementById("toggle-requests-btn");
+const toggleRequestsBtnCollapsed = document.getElementById("toggle-requests-btn-collapsed");
+
+const REQUESTS_COLLAPSED_KEY = "silk.requests.collapsed";
+const updateRequestsToggleLabel = () => {
+  if (!dashboardLayout || !toggleRequestsBtn) return;
+  const collapsed = dashboardLayout.classList.contains("requests-collapsed");
+  toggleRequestsBtn.textContent = collapsed ? "Show Requests" : "Hide Requests";
+  toggleRequestsBtn.title = collapsed ? "Expand request list" : "Collapse request list";
+  toggleRequestsBtn.setAttribute("aria-label", toggleRequestsBtn.title);
+};
+
+if (dashboardLayout && window.localStorage.getItem(REQUESTS_COLLAPSED_KEY) === "1") {
+  dashboardLayout.classList.add("requests-collapsed");
+  updateRequestsToggleLabel();
+}
+
+const toggleRequestsPanel = () => {
+  if (!dashboardLayout) return;
+  dashboardLayout.classList.toggle("requests-collapsed");
+  const collapsed = dashboardLayout.classList.contains("requests-collapsed");
+  window.localStorage.setItem(REQUESTS_COLLAPSED_KEY, collapsed ? "1" : "0");
+  updateRequestsToggleLabel();
+};
+
+toggleRequestsBtn?.addEventListener("click", toggleRequestsPanel);
+toggleRequestsBtnCollapsed?.addEventListener("click", toggleRequestsPanel);
+
+togglePyinstrumentBtn?.addEventListener("click", () => {
+  if (!pyinstrumentPanel || !togglePyinstrumentBtn) return;
+  const isHidden = pyinstrumentPanel.hasAttribute("hidden");
+  if (isHidden) {
+    if (pyinstrumentPanel.childElementCount === 0 && pyinstrumentTemplate) {
+      pyinstrumentPanel.appendChild(pyinstrumentTemplate.content.cloneNode(true));
+    }
+    pyinstrumentPanel.removeAttribute("hidden");
+    togglePyinstrumentBtn.textContent = "Hide Pyinstrument Trace";
+    return;
+  }
+  pyinstrumentPanel.setAttribute("hidden", "");
+  togglePyinstrumentBtn.textContent = "Show Pyinstrument Trace";
 });
 </script>
 </body>
