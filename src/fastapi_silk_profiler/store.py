@@ -282,16 +282,17 @@ class SQLiteReportStore:
         Returns:
             ProfileReport | None: Latest report if available.
         """
-        row = self._conn.execute(
-            """
-            SELECT id, created_at, method, path, status_code, duration_ms,
-                   query_analysis_json, pyinstrument_text, pyinstrument_html
-            FROM reports
-            ORDER BY rowid DESC
-            LIMIT 1
-            """
-        ).fetchone()
-        return self._row_to_report(row) if row is not None else None
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT id, created_at, method, path, status_code, duration_ms,
+                       query_analysis_json, pyinstrument_text, pyinstrument_html
+                FROM reports
+                ORDER BY rowid DESC
+                LIMIT 1
+                """
+            ).fetchone()
+            return self._row_to_report(row) if row is not None else None
 
     def list(self) -> list[ProfileReport]:
         """Return reports ordered by insertion.
@@ -299,15 +300,16 @@ class SQLiteReportStore:
         Returns:
             list[ProfileReport]: Stored reports from oldest to newest.
         """
-        rows = self._conn.execute(
-            """
-            SELECT id, created_at, method, path, status_code, duration_ms,
-                   query_analysis_json, pyinstrument_text, pyinstrument_html
-            FROM reports
-            ORDER BY rowid ASC
-            """
-        ).fetchall()
-        return [self._row_to_report(row) for row in rows]
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT id, created_at, method, path, status_code, duration_ms,
+                       query_analysis_json, pyinstrument_text, pyinstrument_html
+                FROM reports
+                ORDER BY rowid ASC
+                """
+            ).fetchall()
+            return [self._row_to_report(row) for row in rows]
 
     def get(self, report_id: str) -> ProfileReport | None:
         """Return one report by id.
@@ -318,16 +320,17 @@ class SQLiteReportStore:
         Returns:
             ProfileReport | None: Matching report if available.
         """
-        row = self._conn.execute(
-            """
-            SELECT id, created_at, method, path, status_code, duration_ms,
-                   query_analysis_json, pyinstrument_text, pyinstrument_html
-            FROM reports
-            WHERE id = ?
-            """,
-            (report_id,),
-        ).fetchone()
-        return self._row_to_report(row) if row is not None else None
+        with self._lock:
+            row = self._conn.execute(
+                """
+                SELECT id, created_at, method, path, status_code, duration_ms,
+                       query_analysis_json, pyinstrument_text, pyinstrument_html
+                FROM reports
+                WHERE id = ?
+                """,
+                (report_id,),
+            ).fetchone()
+            return self._row_to_report(row) if row is not None else None
 
     def clear(self) -> None:
         """Delete all reports and SQL records."""
@@ -340,10 +343,11 @@ class SQLiteReportStore:
         Returns:
             int: Number of reports.
         """
-        row = self._conn.execute("SELECT COUNT(*) AS count FROM reports").fetchone()
-        if row is None:
-            return 0
-        return int(row["count"])
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) AS count FROM reports").fetchone()
+            if row is None:
+                return 0
+            return int(row["count"])
 
     def close(self) -> None:
         """Close the SQLite connection."""

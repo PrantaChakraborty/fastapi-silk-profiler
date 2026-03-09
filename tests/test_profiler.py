@@ -371,6 +371,35 @@ def test_sqlite_store_rejects_invalid_max_size(tmp_path: Path) -> None:
         raise AssertionError("Expected ValueError for max_size=0")
 
 
+def test_sqlite_store_read_paths_use_lock(tmp_path: Path) -> None:
+    db_path = tmp_path / "silk_profiles.db"
+    store = SQLiteReportStore(db_path=str(db_path), max_size=10)
+    report = ProfileReport(method="GET", path="/x", status_code=200, duration_ms=1.2)
+    store.add(report)
+
+    class _CountingLock:
+        def __init__(self) -> None:
+            self.enter_count = 0
+
+        def __enter__(self) -> _CountingLock:
+            self.enter_count += 1
+            return self
+
+        def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
+            del exc_type, exc, tb
+            return None
+
+    counting_lock = _CountingLock()
+    store._lock = counting_lock  # type: ignore[assignment]
+
+    assert store.latest() is not None
+    assert store.get(report.id) is not None
+    assert len(store.list()) == 1
+    assert len(store) == 1
+    assert counting_lock.enter_count == 4
+    store.close()
+
+
 def test_setup_silk_profiler_uses_sqlite_path(tmp_path: Path) -> None:
     db_path = tmp_path / "setup_store.db"
     app = FastAPI()
