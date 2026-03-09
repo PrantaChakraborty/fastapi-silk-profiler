@@ -16,6 +16,8 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 - Configurable dashboard UI settings via `DashboardUIConfig` (request panel default state,
   pyinstrument default state, SQL preview length, favicon dimming, tooltip toggles).
 - Configurable profiler URL prefix via `setup_silk_profiler(..., profile_path_prefix=...)`.
+- SQL parameter privacy controls via `SQLPrivacyConfig` with default masking for
+  sensitive keys and optional raw-param capture.
 
 ### Changed
 - `setup_silk_profiler` now supports `sqlite_db_path`.

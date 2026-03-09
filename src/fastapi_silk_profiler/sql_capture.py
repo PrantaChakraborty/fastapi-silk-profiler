@@ -29,6 +29,15 @@ class SQLCaptureOptions:
 
     capture_explain: bool = False
     explain_max_statements_per_request: int = 20
+    expose_raw_params: bool = False
+    redacted_param_keys: tuple[str, ...] = (
+        "password",
+        "passwd",
+        "token",
+        "secret",
+        "api_key",
+        "apikey",
+    )
 
 
 @dataclass(slots=True)
@@ -84,6 +93,27 @@ def _safe_repr(value: object, max_len: int = 500) -> str:
     return helper.repr(value)
 
 
+def _sanitize_params(parameters: object, options: SQLCaptureOptions | None) -> str:
+    """Return privacy-safe params representation for one SQL statement."""
+    if options is not None and options.expose_raw_params:
+        return _safe_repr(parameters)
+
+    if isinstance(parameters, dict):
+        lowered_keys = (
+            tuple(token.lower() for token in options.redacted_param_keys)
+            if options is not None
+            else SQLCaptureOptions().redacted_param_keys
+        )
+        masked: dict[object, object] = {}
+        for key, value in parameters.items():
+            key_text = str(key).lower()
+            should_mask = any(token in key_text for token in lowered_keys)
+            masked[key] = "***" if should_mask else value
+        return _safe_repr(masked)
+
+    return _safe_repr(parameters)
+
+
 def _before_cursor_execute(
     conn: _ConnectionWithInfo,
     cursor: object,
@@ -126,7 +156,7 @@ def _after_cursor_execute(
     previous_statement, started = timings.pop()
     record = SQLQueryRecord(
         statement=previous_statement,
-        params=_safe_repr(parameters),
+        params=_sanitize_params(parameters, options),
         duration_ms=(perf_counter() - started) * 1000,
         rowcount=getattr(cursor, "rowcount", None),
     )

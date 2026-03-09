@@ -9,6 +9,7 @@ from fastapi_silk_profiler.models import ProfileReport, SQLQueryRecord
 from fastapi_silk_profiler.query_analysis import QueryAnalysisConfig, analyze_queries, normalize_sql
 from fastapi_silk_profiler.renderers import render_reports_dashboard, render_text
 from fastapi_silk_profiler.sql_capture import (
+    SQLCaptureOptions,
     _after_cursor_execute,
     _before_cursor_execute,
     _capture_explain_plan,
@@ -298,6 +299,68 @@ def test_after_cursor_execute_returns_when_capture_not_started() -> None:
         context=object(),
         executemany=False,
     )
+
+
+def test_sql_param_masking_masks_sensitive_mapping_keys_by_default() -> None:
+    conn = _FakeConnection(dialect_name="sqlite")
+    collector, token = start_sql_capture()
+    try:
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select :password, :token, :email",
+            parameters={"password": "p@ss", "token": "abc", "email": "u@example.com"},
+            context=object(),
+            executemany=False,
+        )
+        _after_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select :password, :token, :email",
+            parameters={"password": "p@ss", "token": "abc", "email": "u@example.com"},
+            context=object(),
+            executemany=False,
+        )
+    finally:
+        stop_sql_capture(token)
+
+    assert len(collector) == 1
+    assert "'password': '***'" in collector[0].params
+    assert "'token': '***'" in collector[0].params
+    assert "'email': 'u@example.com'" in collector[0].params
+
+
+def test_sql_param_masking_can_expose_raw_params_when_enabled() -> None:
+    conn = _FakeConnection(dialect_name="sqlite")
+    collector, token = start_sql_capture(
+        SQLCaptureOptions(
+            expose_raw_params=True,
+            redacted_param_keys=("password", "token"),
+        )
+    )
+    try:
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select :password, :token",
+            parameters={"password": "p@ss", "token": "abc"},
+            context=object(),
+            executemany=False,
+        )
+        _after_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select :password, :token",
+            parameters={"password": "p@ss", "token": "abc"},
+            context=object(),
+            executemany=False,
+        )
+    finally:
+        stop_sql_capture(token)
+
+    assert len(collector) == 1
+    assert "'password': 'p@ss'" in collector[0].params
+    assert "'token': 'abc'" in collector[0].params
 
 
 def test_handle_error_pops_stale_timing_frame() -> None:

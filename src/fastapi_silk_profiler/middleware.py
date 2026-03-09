@@ -67,6 +67,8 @@ class SilkProfilerMiddleware(BaseHTTPMiddleware):
                     explain_max_statements_per_request=(
                         self._config.query_analysis.explain_max_statements_per_request
                     ),
+                    expose_raw_params=self._config.sql_privacy.expose_raw_params,
+                    redacted_param_keys=tuple(self._config.sql_privacy.redacted_param_keys),
                 )
             )
 

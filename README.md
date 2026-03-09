@@ -89,6 +89,9 @@ Template files (independent from Python logic):
 - `exclude_paths: list[str]`
 - `store_size: int`
 - `capture_sql: bool`
+- `sql_privacy: SQLPrivacyConfig`
+  - `expose_raw_params: bool` (default `False`)
+  - `redacted_param_keys: list[str]` (default includes `password`, `token`, `secret`, etc.)
 - `profile_path_prefix: str` (argument to `setup_silk_profiler`; default `"/_silk"`)
 - `query_analysis: QueryAnalysisConfig`
   - `enabled: bool`

@@ -27,6 +27,21 @@ class DashboardUIConfig:
 
 
 @dataclass(slots=True)
+class SQLPrivacyConfig:
+    """Configuration for SQL parameter privacy in captured reports.
+
+    Attributes:
+        expose_raw_params: When True, keep captured SQL params unchanged.
+        redacted_param_keys: Case-insensitive substrings used to mask mapping keys.
+    """
+
+    expose_raw_params: bool = False
+    redacted_param_keys: list[str] = field(
+        default_factory=lambda: ["password", "passwd", "token", "secret", "api_key", "apikey"]
+    )
+
+
+@dataclass(slots=True)
 class ProfilerConfig:
     """Runtime configuration for the profiling middleware.
 
@@ -36,6 +51,7 @@ class ProfilerConfig:
         exclude_paths: Path prefixes that should never be profiled.
         store_size: Maximum number of reports to keep in memory.
         capture_sql: Enables SQLAlchemy query capture when True.
+        sql_privacy: SQL parameter privacy behavior.
         query_analysis: SQL query analysis behavior.
         dashboard_ui: Reports dashboard UI behavior.
     """
@@ -47,6 +63,7 @@ class ProfilerConfig:
     )
     store_size: int = 100
     capture_sql: bool = True
+    sql_privacy: SQLPrivacyConfig = field(default_factory=SQLPrivacyConfig)
     query_analysis: QueryAnalysisConfig = field(default_factory=QueryAnalysisConfig)
     dashboard_ui: DashboardUIConfig = field(default_factory=DashboardUIConfig)
 
