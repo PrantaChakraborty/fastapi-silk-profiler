@@ -28,6 +28,7 @@ def _sql_rows_to_records(rows: Sequence[sqlite3.Row]) -> list[SQLQueryRecord]:
             params=str(row["params"]),
             duration_ms=float(row["duration_ms"]),
             rowcount=int(row["rowcount"]) if row["rowcount"] is not None else None,
+            params_signature=str(row["params_signature"] or ""),
             normalized_statement=str(row["normalized_statement"] or ""),
             is_slow=bool(row["is_slow"]),
             is_critical=bool(row["is_critical"]),
@@ -166,6 +167,7 @@ class SQLiteReportStore:
                     params TEXT NOT NULL,
                     duration_ms REAL NOT NULL,
                     rowcount INTEGER,
+                    params_signature TEXT NOT NULL DEFAULT '',
                     normalized_statement TEXT NOT NULL DEFAULT '',
                     is_slow INTEGER NOT NULL DEFAULT 0,
                     is_critical INTEGER NOT NULL DEFAULT 0,
@@ -186,6 +188,12 @@ class SQLiteReportStore:
                 column="query_analysis_json",
                 sql_type="TEXT",
                 default_sql="'{}'",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="params_signature",
+                sql_type="TEXT",
+                default_sql="''",
             )
             self._ensure_column(
                 table="sql_queries",
@@ -267,10 +275,10 @@ class SQLiteReportStore:
                 """
                 INSERT INTO sql_queries (
                     report_id, position, statement, params, duration_ms, rowcount,
-                    normalized_statement, is_slow, is_critical,
+                    params_signature, normalized_statement, is_slow, is_critical,
                     is_duplicate, is_n_plus_one, sql_truncated, params_truncated, explain_plan
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -280,6 +288,7 @@ class SQLiteReportStore:
                         query.params,
                         query.duration_ms,
                         query.rowcount,
+                        query.params_signature,
                         query.normalized_statement,
                         int(query.is_slow),
                         int(query.is_critical),
@@ -405,7 +414,7 @@ class SQLiteReportStore:
         """
         sql_rows = self._conn.execute(
             """
-            SELECT statement, params, duration_ms, rowcount
+            SELECT statement, params, duration_ms, rowcount, params_signature
                    ,normalized_statement, is_slow, is_critical
                    ,is_duplicate, is_n_plus_one, sql_truncated, params_truncated, explain_plan
             FROM sql_queries

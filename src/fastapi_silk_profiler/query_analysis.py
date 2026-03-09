@@ -73,7 +73,13 @@ def analyze_queries(
         query.is_slow = query.duration_ms >= config.slow_query_threshold_ms
         query.is_critical = query.duration_ms >= critical_threshold
 
-    same_signature_counter = Counter((q.normalized_statement, q.params) for q in queries)
+    same_signature_counter = Counter(
+        (
+            q.normalized_statement,
+            q.params_signature if q.params_signature else q.params,
+        )
+        for q in queries
+    )
     duplicate_groups = {
         key
         for key, count in same_signature_counter.items()
@@ -81,14 +87,16 @@ def analyze_queries(
     }
     if duplicate_groups:
         for query in queries:
-            if (query.normalized_statement, query.params) in duplicate_groups:
+            dedupe_signature = query.params_signature if query.params_signature else query.params
+            if (query.normalized_statement, dedupe_signature) in duplicate_groups:
                 query.is_duplicate = True
 
     normalized_to_query_indexes: dict[str, list[int]] = defaultdict(list)
     normalized_to_params: dict[str, set[str]] = defaultdict(set)
     for index, query in enumerate(queries):
         normalized_to_query_indexes[query.normalized_statement].append(index)
-        normalized_to_params[query.normalized_statement].add(query.params)
+        signature = query.params_signature if query.params_signature else query.params
+        normalized_to_params[query.normalized_statement].add(signature)
 
     n_plus_one_groups: set[str] = set()
     for normalized, indexes in normalized_to_query_indexes.items():

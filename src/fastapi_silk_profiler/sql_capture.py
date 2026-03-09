@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import reprlib
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
@@ -107,6 +108,29 @@ def _truncate_text(value: str, max_len: int) -> tuple[str, bool]:
     return f"{value[:max_len - 3]}...", True
 
 
+def _canonicalize_for_signature(value: object) -> object:
+    """Normalize params into JSON-serializable canonical structure."""
+    if isinstance(value, dict):
+        return {
+            str(key): _canonicalize_for_signature(inner)
+            for key, inner in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonicalize_for_signature(inner) for inner in value]
+    if isinstance(value, set):
+        normalized_items = [_canonicalize_for_signature(inner) for inner in value]
+        return sorted(normalized_items, key=lambda inner: json.dumps(inner, sort_keys=True))
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return repr(value)
+
+
+def _params_signature(parameters: object) -> str:
+    """Build stable signature for duplicate/N+1 grouping."""
+    normalized = _canonicalize_for_signature(parameters)
+    return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
 def _sanitize_params(parameters: object, options: SQLCaptureOptions | None) -> tuple[str, bool]:
     """Return privacy-safe params representation for one SQL statement."""
     max_params_len = options.max_params_length if options is not None else 500
@@ -181,6 +205,7 @@ def _after_cursor_execute(
         params=params_text,
         duration_ms=(perf_counter() - started) * 1000,
         rowcount=getattr(cursor, "rowcount", None),
+        params_signature=_params_signature(parameters),
         sql_truncated=sql_truncated,
         params_truncated=params_truncated,
     )

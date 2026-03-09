@@ -16,6 +16,7 @@ class SQLQueryRecord:
     params: str
     duration_ms: float
     rowcount: int | None
+    params_signature: str = ""
     normalized_statement: str = ""
     is_slow: bool = False
     is_critical: bool = False

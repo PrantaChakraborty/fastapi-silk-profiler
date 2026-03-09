@@ -117,6 +117,7 @@ def render_html_dashboard(report: ProfileReport) -> str:
                 "params": query.params,
                 "duration_ms": query.duration_ms,
                 "rowcount": query.rowcount,
+                "params_signature": query.params_signature,
                 "normalized_statement": query.normalized_statement,
                 "is_slow": query.is_slow,
                 "is_critical": query.is_critical,

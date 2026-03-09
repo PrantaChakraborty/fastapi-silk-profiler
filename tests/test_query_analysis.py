@@ -14,6 +14,7 @@ from fastapi_silk_profiler.sql_capture import (
     _before_cursor_execute,
     _capture_explain_plan,
     _handle_error,
+    _params_signature,
     start_sql_capture,
     stop_sql_capture,
 )
@@ -103,6 +104,38 @@ def test_analyze_queries_marks_expected_flags() -> None:
     assert summary.n_plus_one_query_count == 4
     assert queries[0].is_duplicate is True
     assert queries[2].is_n_plus_one is True
+
+
+def test_analyze_queries_uses_stable_param_signatures_for_duplicate_detection() -> None:
+    queries = [
+        SQLQueryRecord(
+            statement="SELECT * FROM items WHERE a = :a AND b = :b",
+            params="{'a': 1, 'b': 2}",
+            params_signature='{"a":1,"b":2}',
+            duration_ms=2,
+            rowcount=1,
+        ),
+        SQLQueryRecord(
+            statement="SELECT * FROM items WHERE a = :a AND b = :b",
+            params="{'b': 2, 'a': 1}",
+            params_signature='{"a":1,"b":2}',
+            duration_ms=3,
+            rowcount=1,
+        ),
+    ]
+    summary = analyze_queries(
+        queries=queries,
+        request_duration_ms=8,
+        config=QueryAnalysisConfig(
+            enabled=True,
+            duplicate_min_occurrences=2,
+            n_plus_one_min_occurrences=3,
+        ),
+    )
+
+    assert summary.duplicate_query_count == 2
+    assert summary.duplicate_query_groups == 1
+    assert all(query.is_duplicate for query in queries)
 
 
 def test_renderers_include_query_analysis_flags_and_explain() -> None:
@@ -361,6 +394,10 @@ def test_sql_param_masking_can_expose_raw_params_when_enabled() -> None:
     assert len(collector) == 1
     assert "'password': 'p@ss'" in collector[0].params
     assert "'token': 'abc'" in collector[0].params
+
+
+def test_params_signature_is_stable_for_mapping_key_order() -> None:
+    assert _params_signature({"a": 1, "b": 2}) == _params_signature({"b": 2, "a": 1})
 
 
 def test_sql_capture_truncates_statement_and_params_with_flags() -> None:
