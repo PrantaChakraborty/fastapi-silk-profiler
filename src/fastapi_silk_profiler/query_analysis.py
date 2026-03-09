@@ -5,8 +5,15 @@ from __future__ import annotations
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from typing import Any, Literal
 
 from .models import QueryAnalysisSummary, SQLQueryRecord
+
+sqlparse: Any | None
+try:
+    import sqlparse
+except Exception:  # pragma: no cover - fallback path when parser dependency is unavailable
+    sqlparse = None
 
 _STRING_LITERAL_RE = re.compile(r"'(?:''|[^'])*'")
 _NUMERIC_LITERAL_RE = re.compile(r"\b\d+(?:\.\d+)?\b")
@@ -24,21 +31,37 @@ class QueryAnalysisConfig:
     n_plus_one_min_occurrences: int = 3
     capture_explain: bool = False
     explain_max_statements_per_request: int = 20
+    normalization_mode: Literal["regex", "sqlparse"] = "regex"
 
 
-def normalize_sql(statement: str) -> str:
-    """Normalize SQL statement for grouping.
-
-    Args:
-        statement: Raw SQL statement text.
-
-    Returns:
-        str: Normalized statement suitable for grouping.
-    """
+def _normalize_sql_regex(statement: str) -> str:
+    """Normalize SQL statement using regex-based replacement."""
     lowered = statement.strip().lower()
     without_strings = _STRING_LITERAL_RE.sub("?", lowered)
     without_numbers = _NUMERIC_LITERAL_RE.sub("?", without_strings)
     return _WHITESPACE_RE.sub(" ", without_numbers).strip()
+
+
+def normalize_sql(statement: str, mode: Literal["regex", "sqlparse"] = "regex") -> str:
+    """Normalize SQL statement for grouping.
+
+    Args:
+        statement: Raw SQL statement text.
+        mode: Normalization mode (`regex` or `sqlparse`).
+
+    Returns:
+        str: Normalized statement suitable for grouping.
+    """
+    if mode == "sqlparse" and sqlparse is not None:
+        formatted = sqlparse.format(
+            statement,
+            keyword_case="lower",
+            strip_comments=True,
+            reindent=False,
+            strip_whitespace=True,
+        )
+        return _normalize_sql_regex(formatted)
+    return _normalize_sql_regex(statement)
 
 
 def analyze_queries(
@@ -68,7 +91,7 @@ def analyze_queries(
         else config.slow_query_threshold_ms * 5
     )
     for query in queries:
-        normalized = normalize_sql(query.statement)
+        normalized = normalize_sql(query.statement, mode=config.normalization_mode)
         query.normalized_statement = normalized
         query.is_slow = query.duration_ms >= config.slow_query_threshold_ms
         query.is_critical = query.duration_ms >= critical_threshold

@@ -99,6 +99,7 @@ Template files (independent from Python logic):
 - `profile_path_prefix: str` (argument to `setup_silk_profiler`; default `"/_silk"`)
 - `query_analysis: QueryAnalysisConfig`
   - `enabled: bool`
+  - `normalization_mode: Literal["regex", "sqlparse"]` (default `"regex"`)
   - `slow_query_threshold_ms: float`
   - `critical_query_threshold_ms: float | None` (`None` = `5x` slow threshold)
   - `duplicate_min_occurrences: int`

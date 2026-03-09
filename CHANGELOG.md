@@ -22,6 +22,7 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
   `max_sql_length`, `max_params_length`) with per-query truncation flags.
 - Stable parameter signatures for duplicate/N+1 grouping to avoid order-sensitive
   false negatives from stringified params.
+- Optional parser-backed SQL normalization mode (`sqlparse`) for query analysis.
 
 ### Changed
 - `setup_silk_profiler` now supports `sqlite_db_path`.

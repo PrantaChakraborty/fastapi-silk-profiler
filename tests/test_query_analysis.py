@@ -106,6 +106,45 @@ def test_analyze_queries_marks_expected_flags() -> None:
     assert queries[2].is_n_plus_one is True
 
 
+def test_normalize_sql_sqlparse_mode_strips_comments_and_normalizes() -> None:
+    statement = "SELECT  *  FROM items /* noise */ WHERE id = 42 -- tail"
+    normalized = normalize_sql(statement, mode="sqlparse")
+    assert normalized == "select * from items where id = ?"
+
+
+def test_analyze_queries_supports_sqlparse_normalization_mode() -> None:
+    queries = [
+        SQLQueryRecord(
+            statement="SELECT * FROM items WHERE id = 1",
+            params="{}",
+            params_signature="{}",
+            duration_ms=1,
+            rowcount=1,
+        ),
+        SQLQueryRecord(
+            statement="select * from items where id = 2 -- comment",
+            params="{}",
+            params_signature="{}",
+            duration_ms=1,
+            rowcount=1,
+        ),
+    ]
+    summary = analyze_queries(
+        queries=queries,
+        request_duration_ms=4,
+        config=QueryAnalysisConfig(
+            enabled=True,
+            duplicate_min_occurrences=2,
+            n_plus_one_min_occurrences=3,
+            normalization_mode="sqlparse",
+        ),
+    )
+
+    assert summary.duplicate_query_count == 2
+    assert queries[0].normalized_statement == "select * from items where id = ?"
+    assert queries[1].normalized_statement == "select * from items where id = ?"
+
+
 def test_analyze_queries_uses_stable_param_signatures_for_duplicate_detection() -> None:
     queries = [
         SQLQueryRecord(
