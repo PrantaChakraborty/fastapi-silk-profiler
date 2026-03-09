@@ -42,6 +42,7 @@ setup_silk_profiler(
         ),
         exclude_paths=["/docs", "/openapi.json", "/redoc", "/_silk/latest"],
     ),
+    profile_path_prefix="/_silk",  # optional override; default is "/_silk"
     sqlite_db_path="./silk_profiles.db",  # optional: persist reports to SQLite
 )
 
@@ -58,8 +59,18 @@ Generate some traffic, then view the latest report:
 - Dashboard HTML: `/_silk/latest?format=html`
 - Raw pyinstrument HTML: `/_silk/latest?format=pyinstrument_html`
 
+You can mount profiler routes under any prefix with `profile_path_prefix`, for example
+`profile_path_prefix="/debug-profiler"` exposes:
+
+- `/debug-profiler`
+- `/debug-profiler/latest`
+- `/debug-profiler/reports`
+- `/debug-profiler/reports/{report_id}`
+- `POST /debug-profiler/reports/clear`
+
 Browse all captured requests in a dashboard:
 
+- Base dashboard: `/_silk`
 - Reports dashboard: `/_silk/reports`
 - Per-report API: `/_silk/reports/{report_id}?format=json`
 - Clear logs API (used by dashboard button): `POST /_silk/reports/clear`
@@ -78,6 +89,7 @@ Template files (independent from Python logic):
 - `exclude_paths: list[str]`
 - `store_size: int`
 - `capture_sql: bool`
+- `profile_path_prefix: str` (argument to `setup_silk_profiler`; default `"/_silk"`)
 - `query_analysis: QueryAnalysisConfig`
   - `enabled: bool`
   - `slow_query_threshold_ms: float`

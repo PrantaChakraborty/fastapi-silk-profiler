@@ -246,6 +246,19 @@ def test_reports_dashboard_lists_and_selects_details() -> None:
     assert "Time (ms)" in selected.text
 
 
+def test_profiler_base_path_shows_dashboard() -> None:
+    store = InMemoryReportStore(max_size=10)
+    app = create_test_app(ProfilerConfig(enabled=True, capture_sql=False), store)
+    client = TestClient(app)
+
+    client.get("/ping")
+    response = client.get("/_silk")
+
+    assert response.status_code == 200
+    assert "Captured Requests" in response.text
+    assert "Request Details" in response.text
+
+
 def test_reports_dashboard_handles_missing_selected_report() -> None:
     store = InMemoryReportStore(max_size=10)
     app = create_test_app(ProfilerConfig(enabled=True, capture_sql=False), store)
@@ -400,6 +413,60 @@ def test_setup_silk_profiler_without_endpoint_registration() -> None:
     assert "/_silk/latest" not in paths
 
 
+def test_setup_silk_profiler_with_custom_profile_path_prefix() -> None:
+    app = FastAPI()
+    config = ProfilerConfig(enabled=True, capture_sql=False)
+    setup_silk_profiler(app, config=config, profile_path_prefix="/profiler")
+
+    paths = {route.path for route in app.routes}
+    assert "/profiler/latest" in paths
+    assert "/profiler" in paths
+    assert "/profiler/reports" in paths
+    assert "/profiler/reports/{report_id}" in paths
+    assert "/profiler/reports/clear" in paths
+
+    assert "/profiler" in config.exclude_paths
+    assert "/profiler/latest" in config.exclude_paths
+    assert "/profiler/reports" in config.exclude_paths
+
+
+def test_setup_silk_profiler_normalizes_profile_path_prefix() -> None:
+    app = FastAPI()
+    store = setup_silk_profiler(
+        app,
+        config=ProfilerConfig(enabled=True, capture_sql=False),
+        profile_path_prefix=" profiler-v2/ ",
+    )
+    assert isinstance(store, InMemoryReportStore)
+
+    paths = {route.path for route in app.routes}
+    assert "/profiler-v2" in paths
+    assert "/profiler-v2/latest" in paths
+    assert "/profiler-v2/reports" in paths
+
+
+def test_custom_profile_base_path_shows_dashboard() -> None:
+    app = FastAPI()
+    store = setup_silk_profiler(
+        app,
+        config=ProfilerConfig(enabled=True, capture_sql=False),
+        profile_path_prefix="/profiler",
+    )
+    assert isinstance(store, InMemoryReportStore)
+
+    @app.get("/ping")
+    def ping() -> dict[str, str]:
+        return {"status": "ok"}
+
+    client = TestClient(app)
+    client.get("/ping")
+    response = client.get("/profiler")
+
+    assert response.status_code == 200
+    assert "Captured Requests" in response.text
+    assert "Request Details" in response.text
+
+
 def test_setup_enforces_profiler_and_wellknown_exclusions_with_custom_list() -> None:
     app = FastAPI()
     config = ProfilerConfig(enabled=True, exclude_paths=["/custom"])
@@ -410,6 +477,21 @@ def test_setup_enforces_profiler_and_wellknown_exclusions_with_custom_list() -> 
     assert "/_silk" in config.exclude_paths
     assert "/_silk/latest" in config.exclude_paths
     assert "/_silk/reports" in config.exclude_paths
+
+
+def test_setup_rejects_empty_profile_path_prefix() -> None:
+    app = FastAPI()
+
+    try:
+        setup_silk_profiler(
+            app,
+            config=ProfilerConfig(enabled=True, capture_sql=False),
+            profile_path_prefix=" / ",
+        )
+    except ValueError as exc:
+        assert "profile_path_prefix must include at least one path segment" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for empty profile_path_prefix")
 
 
 def test_inmemory_store_get_and_clear() -> None:

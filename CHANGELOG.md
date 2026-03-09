@@ -15,11 +15,13 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 - Optional SQLite `EXPLAIN QUERY PLAN` capture with request-level cap.
 - Configurable dashboard UI settings via `DashboardUIConfig` (request panel default state,
   pyinstrument default state, SQL preview length, favicon dimming, tooltip toggles).
+- Configurable profiler URL prefix via `setup_silk_profiler(..., profile_path_prefix=...)`.
 
 ### Changed
 - `setup_silk_profiler` now supports `sqlite_db_path`.
 - Profiler auto-excludes dashboard endpoints from profiling to avoid self-profiling noise.
 - `ProfilerConfig` now supports `QueryAnalysisConfig` for SQL analysis tuning.
+- Profiler base URL (for example `/_silk`) now renders the reports dashboard.
 
 ### Fixed
 - Example/dev setup now includes `uvicorn` as a development dependency.
