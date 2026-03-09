@@ -324,10 +324,8 @@ button:hover { filter: brightness(1.1); }
 .sql-detail summary::-webkit-details-marker { display: none; }
 .sql-preview {
   display: block;
-  max-width: 560px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .sql-full {
   display: block;
@@ -335,12 +333,288 @@ button:hover { filter: brightness(1.1); }
   white-space: pre-wrap;
   word-break: break-word;
 }
+.origin-stack {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 8px 10px;
+}
+.origin-line {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: var(--meta-strong);
+  font-size: 11px;
+}
 .metric span { color: var(--muted); font-size: 11px; }
 .metric strong { display: block; margin-top: 6px; word-break: break-word; color: var(--title); }
 h3 { margin: 0 0 8px; color: var(--accent); font-size: 13px; letter-spacing: 1px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { border: 1px solid var(--line); padding: 8px; text-align: left; vertical-align: top; }
 thead th { background: var(--thead-bg); color: var(--meta); font-size: 11px; }
+.timeline-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.timeline-filters {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.timeline-filter-btn {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel-2);
+  color: var(--meta);
+  padding: 4px 9px;
+  font-size: 11px;
+}
+.timeline-filter-btn.is-active {
+  color: var(--title);
+  border-color: var(--report-hover-border);
+}
+.timeline-filter-btn.filter-all.is-active {
+  background: rgba(34, 197, 94, 0.16);
+  border-color: rgba(34, 197, 94, 0.48);
+  color: #86efac;
+}
+.timeline-filter-btn.filter-critical {
+  border-color: var(--chip-critical-border);
+  color: var(--chip-critical-text);
+}
+.timeline-filter-btn.filter-critical.is-active {
+  background: var(--chip-critical-bg);
+}
+.timeline-filter-btn.filter-slow {
+  border-color: var(--chip-slow-border);
+  color: var(--chip-slow-text);
+}
+.timeline-filter-btn.filter-slow.is-active {
+  background: var(--chip-slow-bg);
+}
+.timeline-filter-btn.filter-nplus1 {
+  border-color: var(--chip-nplus1-border);
+  color: var(--chip-nplus1-text);
+}
+.timeline-filter-btn.filter-nplus1.is-active {
+  background: var(--chip-nplus1-bg);
+}
+.timeline-filter-btn.filter-duplicate {
+  border-color: var(--chip-duplicate-border);
+  color: var(--chip-duplicate-text);
+}
+.timeline-filter-btn.filter-duplicate.is-active {
+  background: var(--chip-duplicate-bg);
+}
+.timeline-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+.timeline-columns {
+  display: grid;
+  grid-template-columns: 40px 180px 60px minmax(140px, 170px) minmax(220px, 1fr) 24px;
+  gap: 10px;
+  padding: 4px 10px 6px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  margin-bottom: 4px;
+}
+.timeline-list { display: grid; gap: 6px; }
+.timeline-item {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.timeline-item[open] { border-color: var(--report-hover-border); }
+.timeline-item.is-critical { border-color: var(--chip-critical-border); }
+.timeline-item.is-slow { border-color: var(--chip-slow-border); }
+.timeline-item.is-nplus1 { border-color: var(--chip-nplus1-border); }
+.timeline-item.is-duplicate { border-color: var(--chip-duplicate-border); }
+.timeline-item > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 40px 180px 60px minmax(140px, 170px) minmax(220px, 1fr) 24px;
+  gap: 10px;
+  align-items: center;
+}
+.timeline-item > summary::-webkit-details-marker { display: none; }
+.timeline-item > summary > span { min-width: 0; }
+.timeline-chevron {
+  color: var(--muted);
+  text-align: center;
+  transition: transform 0.2s;
+}
+.timeline-item[open] .timeline-chevron { transform: rotate(90deg); }
+.timeline-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.timeline-bar {
+  width: 64px;
+  height: 4px;
+  background: var(--line);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.timeline-bar-fill {
+  height: 100%;
+  background: var(--accent);
+}
+.timeline-time-label {
+  font-size: 11px;
+  color: var(--meta);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.timeline-flags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+.timeline-flags .badge,
+.timeline-flags .timeline-count-badge {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timeline-sql-preview {
+  min-width: 0;
+}
+.timeline-sql-preview code {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.timeline-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--meta);
+  font-size: 10px;
+}
+.timeline-detail {
+  border-top: 1px solid var(--line);
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.detail-block {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+}
+.detail-block h4 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 1.2px;
+}
+.detail-code {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.detail-origin-line {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--title);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.detail-origin-line:last-child { margin-bottom: 0; color: var(--meta); }
+.origin-frame {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: auto;
+  background: var(--panel-2);
+}
+.origin-frame-line {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 4px 10px;
+  border-left: 3px solid transparent;
+  color: var(--text);
+  min-width: max-content;
+}
+.origin-frame-line-number {
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
+.origin-frame-line-code {
+  white-space: pre;
+  color: var(--text);
+}
+.origin-token-keyword { color: #93c5fd; font-weight: 600; }
+.origin-token-string { color: #86efac; }
+.origin-token-number { color: #fcd34d; }
+.origin-token-call { color: #c4b5fd; }
+.origin-token-comment { color: var(--muted); font-style: italic; }
+.origin-frame-line.is-highlight {
+  background: rgba(59, 130, 246, 0.2);
+  border-left-color: #3b82f6;
+}
+.origin-frame-line.is-highlight .origin-frame-line-number {
+  color: #93c5fd;
+  font-weight: 700;
+}
+.origin-frame-line.is-highlight .origin-frame-line-code {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+.detail-metrics {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.detail-metric {
+  min-width: 100px;
+}
+.detail-metric .k {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.detail-metric .v {
+  color: var(--title);
+  font-size: 13px;
+  margin-top: 2px;
+}
 pre {
   white-space: pre-wrap;
   background: var(--panel-2);
@@ -361,6 +635,12 @@ code { color: var(--code-color); }
 @media (max-width: 960px) {
   .layout { grid-template-columns: 1fr; }
   .list { max-height: 320px; }
+  .timeline-columns,
+  .timeline-item > summary {
+    grid-template-columns: 30px 118px 46px minmax(90px, 110px) minmax(120px, 1fr) 20px;
+    gap: 8px;
+  }
+  .detail-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -430,87 +710,112 @@ code { color: var(--code-color); }
           <div class="metric"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div>
           {% endfor %}
         </div>
-        {% for card in details.analysis_cards %}
-        <section class="card">
-          <h3>{{ card.title }}</h3>
-          {% if card.rows %}
-          <table>
-            <thead>
-              <tr>
-                {% for column in card.columns %}
-                <th>
-                  {% if show_column_tooltips %}
-                  <span title="{% if column == 'Calls' %}How many times this query pattern appeared in the request.{% elif column == 'Total ms' %}Total cumulative database time spent in this query pattern.{% elif column == 'Max ms' %}Slowest single execution time for this query pattern.{% elif column == 'SQL' %}Representative SQL statement for this group (truncated).{% elif column == 'Unique Params' %}How many distinct parameter sets were used for this pattern.{% else %}{{ column }}{% endif %}">{{ column }}</span>
-                  {% else %}
-                  {{ column }}
-                  {% endif %}
-                </th>
-                {% endfor %}
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in card.rows %}
-              <tr>
-                {% for cell in row %}
-                <td>{{ cell }}</td>
-                {% endfor %}
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-          {% else %}
-          <div class="empty">{{ card.empty_message }}</div>
-          {% endif %}
-        </section>
-        {% endfor %}
         <section class="card">
           <h3>SQL Timeline</h3>
           {% if details.query_rows %}
-          <table>
-            <thead>
-              <tr>
-                {% for header in timeline_headers %}
-                <th>
-                  {% if show_column_tooltips %}
-                  <span title="{{ header.tooltip }}">{{ header.label }}</span>
-                  {% else %}
-                  {{ header.label }}
-                  {% endif %}
-                </th>
-                {% endfor %}
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in details.query_rows %}
-              <tr class="{{ row.row_class }}">
-                <td>{{ row.step }}</td>
-                <td>{{ row.time }}</td>
-                <td>{{ row.rowcount }}</td>
-                <td>
+          <div class="timeline-toolbar">
+            <div class="timeline-filters">
+              <span class="timeline-count">FILTER</span>
+              <button type="button" class="timeline-filter-btn filter-all is-active" data-timeline-filter="all">All</button>
+              <button type="button" class="timeline-filter-btn filter-critical" data-timeline-filter="critical">Critical</button>
+              <button type="button" class="timeline-filter-btn filter-slow" data-timeline-filter="slow">Slow</button>
+              <button type="button" class="timeline-filter-btn filter-nplus1" data-timeline-filter="n+1">N+1</button>
+              <button type="button" class="timeline-filter-btn filter-duplicate" data-timeline-filter="duplicate">Duplicate</button>
+            </div>
+            <div class="timeline-count" id="timeline-count">{{ details.query_rows|length }} / {{ details.query_rows|length }} queries</div>
+          </div>
+          <div class="timeline-columns">
+            <span>Step</span>
+            <span>Time (ms)</span>
+            <span>Rows</span>
+            <span>Flags</span>
+            <span>SQL</span>
+            <span></span>
+          </div>
+          <div class="timeline-list" id="timeline-list">
+            {% for row in details.query_rows %}
+            <details
+              id="q-{{ row.step }}"
+              class="timeline-item {{ row.row_class }}{% if 'is-critical' in row.row_class %} is-critical{% elif 'is-slow' in row.row_class %} is-slow{% elif 'is-nplus1' in row.row_class %} is-nplus1{% elif 'is-duplicate' in row.row_class %} is-duplicate{% endif %}"
+              data-timeline-tags="{{ row.filter_tags|join(',') }}"
+              data-timeline-time="{{ row.time_value }}"
+            >
+              <summary>
+                <span>{{ row.step }}</span>
+                <span class="timeline-time">
+                  <span class="timeline-bar"><span class="timeline-bar-fill"></span></span>
+                  <span class="timeline-time-label" title="{{ row.time }}">{{ row.time_label }}</span>
+                </span>
+                <span>{{ row.rowcount }}</span>
+                <span class="timeline-flags">
                   {% if row.flags %}
                     {% for flag in row.flags %}
                     <span class="badge {{ flag.class_name }}">{{ flag.text }}</span>
                     {% endfor %}
                   {% else %}
-                  -
+                  <span class="timeline-count">-</span>
                   {% endif %}
-                </td>
-                <td>
-                  {% if row.sql_preview != row.sql_full %}
-                  <details class="sql-detail">
-                    <summary><code class="sql-preview">{{ row.sql_preview }}</code></summary>
-                    <code class="sql-full">{{ row.sql_full }}</code>
-                  </details>
-                  {% else %}
-                  <code class="sql-preview">{{ row.sql_full }}</code>
+                  {% if row.count_label %}
+                  <span class="timeline-count-badge">{{ row.count_label }}</span>
                   {% endif %}
-                </td>
-                <td><code>{{ row.params }}</code></td>
-                <td><code>{{ row.explain|safe if row.explain else '-' }}</code></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+                </span>
+                <span class="timeline-sql-preview"><code>{{ row.sql_full.split('\n')[0] }}</code></span>
+                <span class="timeline-chevron">›</span>
+              </summary>
+              <div class="timeline-detail">
+                <div class="detail-block">
+                  <h4>Query</h4>
+                  <pre class="detail-code"><code>{{ row.sql_full }}</code></pre>
+                </div>
+                <div class="detail-grid">
+                  <div class="detail-block">
+                    <h4>Origin</h4>
+                    {% for origin_block in row.origin_blocks %}
+                    <p class="detail-origin-line"><code>-> {{ origin_block.origin }}</code></p>
+                    {% if origin_block.code_line %}
+                    <p class="detail-origin-line"><code>{{ origin_block.code_line }}</code></p>
+                    {% endif %}
+                    {% if origin_block.stack_lines %}
+                    <div class="origin-stack">
+                      {% for stack_line in origin_block.stack_lines %}
+                      <span class="origin-line">{{ stack_line }}</span>
+                      {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if origin_block.context_lines %}
+                    <div class="origin-frame">
+{% for context_line in origin_block.context_lines %}
+<div class="origin-frame-line{% if origin_block.highlight_line == loop.index %} is-highlight{% endif %}">
+  <span class="origin-frame-line-number">{{ loop.index }}</span>
+  <span class="origin-frame-line-code">{{ context_line }}</span>
+</div>
+{% endfor %}
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                  </div>
+                  <div class="detail-block">
+                    <h4>Params</h4>
+                    <pre class="detail-code"><code>{{ row.params }}</code></pre>
+                  </div>
+                  <div class="detail-block" style="grid-column: 1 / -1;">
+                    <h4>EXPLAIN QUERY PLAN</h4>
+                    <pre class="detail-code"><code>{{ row.explain|safe if row.explain else '-' }}</code></pre>
+                  </div>
+                </div>
+                <div class="detail-block">
+                  <div class="detail-metrics">
+                    <div class="detail-metric"><div class="k">Duration</div><div class="v">{{ row.time_label }}</div></div>
+                    <div class="detail-metric"><div class="k">Rows</div><div class="v">{{ row.rowcount }}</div></div>
+                    {% if row.count_label %}
+                    <div class="detail-metric"><div class="k">Executions</div><div class="v">{{ row.count_label }}</div></div>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </details>
+            {% endfor %}
+          </div>
           {% else %}
           <div class="empty">No SQL queries captured for this request.</div>
           {% endif %}
@@ -640,6 +945,135 @@ const formatLocalTimes = () => {
 };
 
 formatLocalTimes();
+
+const escapeHtml = (value) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+const originKeywords = new Set([
+  "def", "return", "for", "in", "if", "else", "elif", "with", "as", "await", "async",
+  "class", "try", "except", "raise", "from", "import", "while", "lambda", "yield",
+  "None", "True", "False",
+]);
+
+const originTokenPattern =
+  /#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d+)?\b|\b[A-Za-z_][A-Za-z0-9_]*\b(?=\s*\()|\b[A-Za-z_][A-Za-z0-9_]*\b/g;
+
+const classifyOriginToken = (token) => {
+  if (token.startsWith("#")) return "origin-token-comment";
+  if (token.startsWith('"') || token.startsWith("'")) return "origin-token-string";
+  if (/^\d/.test(token)) return "origin-token-number";
+  if (originKeywords.has(token)) return "origin-token-keyword";
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(token)) return "origin-token-call";
+  return "";
+};
+
+const highlightOriginCode = (code) => {
+  let result = "";
+  let cursor = 0;
+  const matcher = new RegExp(originTokenPattern.source, "g");
+  for (const match of code.matchAll(matcher)) {
+    const index = match.index ?? 0;
+    const token = match[0];
+    result += escapeHtml(code.slice(cursor, index));
+    const className = classifyOriginToken(token);
+    if (className) {
+      result += `<span class="${className}">${escapeHtml(token)}</span>`;
+    } else {
+      result += escapeHtml(token);
+    }
+    cursor = index + token.length;
+  }
+  result += escapeHtml(code.slice(cursor));
+  return result;
+};
+
+const decorateOriginFrames = () => {
+  document.querySelectorAll(".origin-frame-line-code").forEach((element) => {
+    if (!(element instanceof HTMLElement)) return;
+    const raw = element.textContent || "";
+    element.innerHTML = highlightOriginCode(raw);
+  });
+};
+
+decorateOriginFrames();
+
+const timelineList = document.getElementById("timeline-list");
+const timelineCount = document.getElementById("timeline-count");
+const timelineFilterButtons = Array.from(document.querySelectorAll("[data-timeline-filter]"));
+
+const timelineItems = timelineList
+  ? Array.from(timelineList.querySelectorAll(".timeline-item"))
+  : [];
+
+const updateTimelineBars = () => {
+  if (timelineItems.length === 0) return;
+  const maxTime = Math.max(
+    ...timelineItems.map((item) => Number(item.getAttribute("data-timeline-time") || "0"))
+  );
+  timelineItems.forEach((item) => {
+    const value = Number(item.getAttribute("data-timeline-time") || "0");
+    const pct = maxTime > 0 ? Math.min((value / maxTime) * 100, 100) : 0;
+    const fill = item.querySelector(".timeline-bar-fill");
+    if (!(fill instanceof HTMLElement)) return;
+    fill.style.width = pct.toFixed(2) + "%";
+    fill.style.background = value > 5 ? "#EF4444" : value > 1 ? "#F59E0B" : "#22C55E";
+  });
+};
+
+const applyTimelineFilter = (filterValue) => {
+  let visible = 0;
+  timelineItems.forEach((item) => {
+    const tags = (item.getAttribute("data-timeline-tags") || "").split(",").filter(Boolean);
+    const matches = filterValue === "all" || tags.includes(filterValue);
+    item.style.display = matches ? "" : "none";
+    if (matches) visible += 1;
+  });
+  if (timelineCount) {
+    timelineCount.textContent = `${visible} / ${timelineItems.length} queries`;
+  }
+};
+
+const openTimelineFromHash = () => {
+  const hash = window.location.hash;
+  if (!hash.startsWith("#q-")) return;
+  const target = document.getElementById(hash.slice(1));
+  if (!(target instanceof HTMLDetailsElement)) return;
+  if (!target.open) target.open = true;
+  target.scrollIntoView({ block: "start", behavior: "smooth" });
+};
+
+timelineFilterButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    timelineFilterButtons.forEach((btn) => btn.classList.remove("is-active"));
+    button.classList.add("is-active");
+    applyTimelineFilter(button.getAttribute("data-timeline-filter") || "all");
+  });
+});
+
+timelineItems.forEach((item) => {
+  item.addEventListener("toggle", () => {
+    if (!(item instanceof HTMLDetailsElement)) return;
+    if (item.open) {
+      window.history.replaceState(null, "", "#" + item.id);
+      return;
+    }
+    if (window.location.hash === "#" + item.id) {
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search
+      );
+    }
+  });
+});
+
+updateTimelineBars();
+applyTimelineFilter("all");
+openTimelineFromHash();
+window.addEventListener("hashchange", openTimelineFromHash);
 
 const updateRequestsToggleLabel = () => {
   if (!dashboardLayout || !toggleRequestsBtn) return;

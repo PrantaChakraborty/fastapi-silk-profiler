@@ -16,7 +16,7 @@ from fastapi_silk_profiler import (
     SQLiteReportStore,
     setup_silk_profiler,
 )
-from fastapi_silk_profiler.models import ProfileReport
+from fastapi_silk_profiler.models import ProfileReport, SQLQueryRecord
 
 
 def create_test_app(config: ProfilerConfig, store: ReportStore) -> FastAPI:
@@ -358,6 +358,42 @@ def test_sqlite_store_persists_reports_between_instances(tmp_path: Path) -> None
 
     store_a.close()
     store_b.close()
+
+
+def test_sqlite_store_writes_zero_for_missing_callsite_highlight(tmp_path: Path) -> None:
+    db_path = tmp_path / "silk_profiles.db"
+    store = SQLiteReportStore(db_path=str(db_path), max_size=10)
+    report = ProfileReport(
+        method="GET",
+        path="/manual",
+        status_code=200,
+        duration_ms=1.0,
+        sql_queries=[
+            SQLQueryRecord(
+                statement="select 1",
+                params="()",
+                duration_ms=0.1,
+                rowcount=1,
+                callsite="app.py:10 in handler",
+                callsite_code="session.execute(stmt)",
+                callsite_stack=["app.py:1 in request", "└─ app.py:10 in handler"],
+                callsite_context=["def handler():", "    session.execute(stmt)"],
+                callsite_highlight_line=None,
+            )
+        ],
+    )
+
+    store.add(report)
+    restored = store.latest()
+
+    assert restored is not None
+    assert len(restored.sql_queries) == 1
+    assert restored.sql_queries[0].callsite_highlight_line is None
+    assert restored.sql_queries[0].callsite_stack == [
+        "app.py:1 in request",
+        "└─ app.py:10 in handler",
+    ]
+    store.close()
 
 
 def test_sqlite_store_rejects_invalid_max_size(tmp_path: Path) -> None:

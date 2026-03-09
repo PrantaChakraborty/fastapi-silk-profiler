@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import inspect
 import json
+import linecache
 import reprlib
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from threading import Lock
 from time import perf_counter
+from types import FrameType
 from typing import Protocol, cast
 
 from sqlalchemy import event
@@ -42,6 +45,15 @@ class SQLCaptureOptions:
     max_queries_per_request: int = 1000
     max_sql_length: int = 5000
     max_params_length: int = 500
+    capture_callsite: bool = False
+    capture_callsite_stack: bool = True
+    capture_callsite_context: bool = False
+    callsite_context_max_lines: int = 60
+    callsite_max_frames: int = 80
+    callsite_exclude_substrings: tuple[str, ...] = (
+        "fastapi_silk_profiler/sql_capture.py",
+        "site-packages/sqlalchemy",
+    )
 
 
 @dataclass(slots=True)
@@ -131,6 +143,102 @@ def _params_signature(parameters: object) -> str:
     return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
 
+def _format_callsite_stack(frames: list[str]) -> list[str]:
+    """Format frame list in a pyinstrument-like tree shape."""
+    if not frames:
+        return []
+    if len(frames) == 1:
+        return frames
+    formatted = [frames[0]]
+    for depth, frame_text in enumerate(frames[1:], start=1):
+        formatted.append(f"{'   ' * (depth - 1)}└─ {frame_text}")
+    return formatted
+
+
+def _build_callsite_stack(
+    frame: FrameType,
+    options: SQLCaptureOptions,
+) -> list[str]:
+    """Build call stack from app frames for one SQL query."""
+    excluded = options.callsite_exclude_substrings
+    max_frames = options.callsite_max_frames
+    if max_frames <= 0:
+        return []
+
+    stack: list[str] = []
+    current: FrameType | None = frame
+    while current is not None and len(stack) < max_frames:
+        filename = current.f_code.co_filename
+        normalized = filename.replace("\\", "/")
+        if any(token in normalized for token in excluded):
+            current = current.f_back
+            continue
+        lineno = current.f_lineno
+        function_name = current.f_code.co_name
+        stack.append(f"{filename}:{lineno} in {function_name}")
+        current = current.f_back
+    stack.reverse()
+    return _format_callsite_stack(stack)
+
+
+def _detect_callsite(
+    options: SQLCaptureOptions | None,
+) -> tuple[str, str, list[str], int | None, list[str]]:
+    """Return best-effort origin, source line, context and call stack from frames."""
+    active_options = options if options is not None else SQLCaptureOptions()
+    frame = inspect.currentframe()
+    if frame is None:
+        return "", "", [], None, []
+    excluded = active_options.callsite_exclude_substrings
+    try:
+        current = frame.f_back
+        while current is not None:
+            filename = current.f_code.co_filename
+            normalized = filename.replace("\\", "/")
+            if any(token in normalized for token in excluded):
+                current = current.f_back
+                continue
+            lineno = current.f_lineno
+            function_name = current.f_code.co_name
+            origin = f"{filename}:{lineno} in {function_name}"
+            code_line = linecache.getline(filename, lineno).strip()
+            stack_lines = (
+                _build_callsite_stack(current, active_options)
+                if active_options.capture_callsite_stack
+                else []
+            )
+            if not active_options.capture_callsite_context:
+                return origin, code_line, [], None, stack_lines
+            try:
+                source_lines, start_line = inspect.getsourcelines(current)
+            except (OSError, TypeError):
+                return origin, code_line, [], None, stack_lines
+
+            cleaned_lines = [line.rstrip("\n") for line in source_lines]
+            raw_highlight = lineno - start_line
+            if raw_highlight < 0:
+                raw_highlight = 0
+            if raw_highlight >= len(cleaned_lines):
+                raw_highlight = len(cleaned_lines) - 1 if cleaned_lines else 0
+
+            max_lines = active_options.callsite_context_max_lines
+            if max_lines <= 0 or len(cleaned_lines) <= max_lines:
+                highlight_line = raw_highlight + 1 if cleaned_lines else None
+                return origin, code_line, cleaned_lines, highlight_line, stack_lines
+
+            half = max_lines // 2
+            start_index = max(0, raw_highlight - half)
+            end_index = min(len(cleaned_lines), start_index + max_lines)
+            if end_index - start_index < max_lines:
+                start_index = max(0, end_index - max_lines)
+            clipped = cleaned_lines[start_index:end_index]
+            clipped_highlight = raw_highlight - start_index + 1
+            return origin, code_line, clipped, clipped_highlight, stack_lines
+        return "", "", [], None, []
+    finally:
+        del frame
+
+
 def _sanitize_params(parameters: object, options: SQLCaptureOptions | None) -> tuple[str, bool]:
     """Return privacy-safe params representation for one SQL statement."""
     max_params_len = options.max_params_length if options is not None else 500
@@ -200,11 +308,21 @@ def _after_cursor_execute(
     max_sql_len = options.max_sql_length if options is not None else 5000
     statement_text, sql_truncated = _truncate_text(previous_statement, max_sql_len)
     params_text, params_truncated = _sanitize_params(parameters, options)
+    callsite, callsite_code, callsite_context, callsite_highlight_line, callsite_stack = (
+        _detect_callsite(options)
+        if options is not None and options.capture_callsite
+        else ("", "", [], None, [])
+    )
     record = SQLQueryRecord(
         statement=statement_text,
         params=params_text,
         duration_ms=(perf_counter() - started) * 1000,
         rowcount=getattr(cursor, "rowcount", None),
+        callsite=callsite,
+        callsite_code=callsite_code,
+        callsite_stack=callsite_stack,
+        callsite_context=callsite_context,
+        callsite_highlight_line=callsite_highlight_line,
         params_signature=_params_signature(parameters),
         sql_truncated=sql_truncated,
         params_truncated=params_truncated,

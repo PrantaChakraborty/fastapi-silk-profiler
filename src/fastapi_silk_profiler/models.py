@@ -16,6 +16,11 @@ class SQLQueryRecord:
     params: str
     duration_ms: float
     rowcount: int | None
+    callsite: str = ""
+    callsite_code: str = ""
+    callsite_stack: list[str] = field(default_factory=list)
+    callsite_context: list[str] = field(default_factory=list)
+    callsite_highlight_line: int | None = None
     params_signature: str = ""
     normalized_statement: str = ""
     is_slow: bool = False

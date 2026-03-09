@@ -93,6 +93,10 @@ Template files (independent from Python logic):
   - `max_queries_per_request: int` (default `1000`)
   - `max_sql_length: int` (default `5000`)
   - `max_params_length: int` (default `500`)
+  - `capture_callsite: bool` (default `False`)
+  - `capture_callsite_stack: bool` (default `True`, when callsite capture is enabled)
+  - `capture_callsite_context: bool` (default `False`)
+  - `callsite_context_max_lines: int` (default `60`)
 - `sql_privacy: SQLPrivacyConfig`
   - `expose_raw_params: bool` (default `False`)
   - `redacted_param_keys: list[str]` (default includes `password`, `token`, `secret`, etc.)

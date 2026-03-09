@@ -49,11 +49,19 @@ class SQLCaptureConfig:
         max_queries_per_request: Hard cap on captured SQL rows per request.
         max_sql_length: Maximum SQL statement length before truncation.
         max_params_length: Maximum serialized params length before truncation.
+        capture_callsite: Capture calling source location for each SQL query.
+        capture_callsite_stack: Capture a pyinstrument-style call stack for each SQL query.
+        capture_callsite_context: Capture function-level code context for callsite display.
+        callsite_context_max_lines: Maximum lines to keep in captured callsite context.
     """
 
     max_queries_per_request: int = 1000
     max_sql_length: int = 5000
     max_params_length: int = 500
+    capture_callsite: bool = False
+    capture_callsite_stack: bool = True
+    capture_callsite_context: bool = False
+    callsite_context_max_lines: int = 60
 
 
 @dataclass(slots=True)

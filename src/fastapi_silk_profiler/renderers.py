@@ -79,6 +79,14 @@ def render_text(report: ProfileReport) -> str:
             f"  [{index}] {query.duration_ms:.2f} ms "
             f"| rowcount={query.rowcount} | flags={flag_text}"
         )
+        if query.callsite:
+            lines.append(f"      Callsite: {query.callsite}")
+        if query.callsite_stack:
+            lines.append("      Stack:")
+            for stack_line in query.callsite_stack:
+                lines.append(f"        {stack_line}")
+        if query.callsite_code:
+            lines.append(f"      Source: {query.callsite_code}")
         lines.append(f"      SQL: {query.statement}")
         lines.append(f"      Params: {query.params}")
         if query.explain_plan:
@@ -117,6 +125,11 @@ def render_html_dashboard(report: ProfileReport) -> str:
                 "params": query.params,
                 "duration_ms": query.duration_ms,
                 "rowcount": query.rowcount,
+                "callsite": query.callsite,
+                "callsite_code": query.callsite_code,
+                "callsite_stack": query.callsite_stack,
+                "callsite_context": query.callsite_context,
+                "callsite_highlight_line": query.callsite_highlight_line,
                 "params_signature": query.params_signature,
                 "normalized_statement": query.normalized_statement,
                 "is_slow": query.is_slow,
@@ -152,25 +165,17 @@ def _short_sql(statement: str, max_len: int = 140) -> str:
 
 
 @dataclass(slots=True)
-class _QueryGroupBucket:
-    count: int = 0
-    total_ms: float = 0.0
-    max_ms: float = 0.0
-    sample_sql: str = ""
-
-
-@dataclass(slots=True)
-class _NPlusOneGroupBucket(_QueryGroupBucket):
-    params: set[str] = field(default_factory=set)
-
-
-@dataclass(slots=True)
 class _NPlusOneTimelineBucket:
     count: int = 0
     total_ms: float = 0.0
     sample_sql: str = ""
     params: set[str] = field(default_factory=set)
     explain_plan: list[str] = field(default_factory=list)
+    callsites: set[str] = field(default_factory=set)
+    callsite_code_by_origin: dict[str, str] = field(default_factory=dict)
+    callsite_stack_by_origin: dict[str, list[str]] = field(default_factory=dict)
+    callsite_context_by_origin: dict[str, list[str]] = field(default_factory=dict)
+    callsite_highlight_by_origin: dict[str, int | None] = field(default_factory=dict)
     has_slow: bool = False
     has_critical: bool = False
 
@@ -182,104 +187,13 @@ class _DuplicateTimelineBucket:
     sample_sql: str = ""
     params: str = ""
     explain_plan: list[str] = field(default_factory=list)
+    callsites: set[str] = field(default_factory=set)
+    callsite_code_by_origin: dict[str, str] = field(default_factory=dict)
+    callsite_stack_by_origin: dict[str, list[str]] = field(default_factory=dict)
+    callsite_context_by_origin: dict[str, list[str]] = field(default_factory=dict)
+    callsite_highlight_by_origin: dict[str, int | None] = field(default_factory=dict)
     has_slow: bool = False
     has_critical: bool = False
-
-
-def _build_query_analysis_cards(
-    report: ProfileReport,
-    dashboard_ui: DashboardUIConfig,
-) -> list[dict[str, Any]]:
-    """Build grouped bottleneck cards for dashboard template."""
-    slow_groups: dict[str, _QueryGroupBucket] = defaultdict(_QueryGroupBucket)
-    duplicate_groups: dict[tuple[str, str], _QueryGroupBucket] = defaultdict(_QueryGroupBucket)
-    n_plus_one_groups: dict[str, _NPlusOneGroupBucket] = defaultdict(_NPlusOneGroupBucket)
-
-    for query in report.sql_queries:
-        normalized_key = query.normalized_statement or query.statement
-        if query.is_slow:
-            bucket = slow_groups[normalized_key]
-            bucket.count += 1
-            bucket.total_ms += query.duration_ms
-            bucket.max_ms = max(bucket.max_ms, query.duration_ms)
-            if not bucket.sample_sql:
-                bucket.sample_sql = query.statement
-        if query.is_duplicate:
-            bucket = duplicate_groups[(normalized_key, query.params)]
-            bucket.count += 1
-            bucket.total_ms += query.duration_ms
-            bucket.max_ms = max(bucket.max_ms, query.duration_ms)
-            if not bucket.sample_sql:
-                bucket.sample_sql = query.statement
-        if query.is_n_plus_one:
-            bucket = n_plus_one_groups[normalized_key]
-            bucket.count += 1
-            bucket.total_ms += query.duration_ms
-            bucket.max_ms = max(bucket.max_ms, query.duration_ms)
-            bucket.params.add(query.params)
-            if not bucket.sample_sql:
-                bucket.sample_sql = query.statement
-
-    slow_rows = [
-        [
-            str(bucket.count),
-            f"{bucket.total_ms:.2f}",
-            f"{bucket.max_ms:.2f}",
-            _short_sql(bucket.sample_sql),
-        ]
-        for _, bucket in sorted(
-            slow_groups.items(),
-            key=lambda item: item[1].total_ms,
-            reverse=True,
-        )[:5]
-    ]
-    duplicate_rows = [
-        [
-            str(bucket.count),
-            f"{bucket.total_ms:.2f}",
-            f"{bucket.max_ms:.2f}",
-            _short_sql(bucket.sample_sql),
-        ]
-        for _, bucket in sorted(
-            duplicate_groups.items(),
-            key=lambda item: item[1].total_ms,
-            reverse=True,
-        )[:5]
-    ]
-    n_plus_one_rows = [
-        [
-            str(bucket.count),
-            str(len(bucket.params)),
-            f"{bucket.total_ms:.2f}",
-            f"{bucket.max_ms:.2f}",
-            _short_sql(bucket.sample_sql),
-        ]
-        for _, bucket in sorted(
-            n_plus_one_groups.items(),
-            key=lambda item: item[1].total_ms,
-            reverse=True,
-        )
-    ]
-    return [
-        {
-            "title": "Top Slow Query Offenders",
-            "columns": ["Calls", "Total ms", "Max ms", "SQL"],
-            "rows": slow_rows,
-            "empty_message": "No slow queries flagged.",
-        },
-        {
-            "title": "Top Duplicate Query Offenders",
-            "columns": ["Calls", "Total ms", "Max ms", "SQL"],
-            "rows": duplicate_rows,
-            "empty_message": "No duplicate query groups flagged.",
-        },
-        {
-            "title": "N+1 Query Groups (Collapsed)",
-            "columns": ["Calls", "Unique Params", "Total ms", "Max ms", "SQL"],
-            "rows": n_plus_one_rows,
-            "empty_message": "No N+1 patterns flagged.",
-        },
-    ]
 
 
 def _build_query_rows(report: ProfileReport, ui: DashboardUIConfig) -> list[dict[str, Any]]:
@@ -302,6 +216,20 @@ def _build_query_rows(report: ProfileReport, ui: DashboardUIConfig) -> list[dict
                 bucket.sample_sql = query.statement
             if not bucket.explain_plan and query.explain_plan:
                 bucket.explain_plan = query.explain_plan
+            if query.callsite:
+                bucket.callsites.add(query.callsite)
+                if query.callsite_code and query.callsite not in bucket.callsite_code_by_origin:
+                    bucket.callsite_code_by_origin[query.callsite] = query.callsite_code
+                if query.callsite_stack and query.callsite not in bucket.callsite_stack_by_origin:
+                    bucket.callsite_stack_by_origin[query.callsite] = query.callsite_stack
+                if (
+                    query.callsite_context
+                    and query.callsite not in bucket.callsite_context_by_origin
+                ):
+                    bucket.callsite_context_by_origin[query.callsite] = query.callsite_context
+                    bucket.callsite_highlight_by_origin[query.callsite] = (
+                        query.callsite_highlight_line
+                    )
             continue
         if query.is_duplicate:
             dup_key = (query.normalized_statement or query.statement, query.params)
@@ -315,6 +243,23 @@ def _build_query_rows(report: ProfileReport, ui: DashboardUIConfig) -> list[dict
                 dup_bucket.params = query.params
             if not dup_bucket.explain_plan and query.explain_plan:
                 dup_bucket.explain_plan = query.explain_plan
+            if query.callsite:
+                dup_bucket.callsites.add(query.callsite)
+                if query.callsite_code and query.callsite not in dup_bucket.callsite_code_by_origin:
+                    dup_bucket.callsite_code_by_origin[query.callsite] = query.callsite_code
+                if (
+                    query.callsite_stack
+                    and query.callsite not in dup_bucket.callsite_stack_by_origin
+                ):
+                    dup_bucket.callsite_stack_by_origin[query.callsite] = query.callsite_stack
+                if (
+                    query.callsite_context
+                    and query.callsite not in dup_bucket.callsite_context_by_origin
+                ):
+                    dup_bucket.callsite_context_by_origin[query.callsite] = query.callsite_context
+                    dup_bucket.callsite_highlight_by_origin[query.callsite] = (
+                        query.callsite_highlight_line
+                    )
 
     rows: list[dict[str, Any]] = []
     emitted_n_plus_one_keys: set[str] = set()
@@ -337,11 +282,54 @@ def _build_query_rows(report: ProfileReport, ui: DashboardUIConfig) -> list[dict
                 {
                     "row_class": "timeline-row is-nplus1",
                     "step": str(index),
+                    "time_value": bucket.total_ms,
                     "time": f"{avg_ms:.2f} each · {bucket.total_ms:.2f} total",
+                    "time_label": f"{avg_ms:.2f} ms each · {bucket.total_ms:.2f} ms total",
                     "rowcount": "-",
                     "flags": flags,
-                    "sql_preview": _short_sql(bucket.sample_sql, max_len=ui.sql_preview_max_length),
+                    "count_label": f"×{bucket.count}" if bucket.count > 1 else "",
+                    "filter_tags": ["n+1"]
+                    + (["critical"] if bucket.has_critical else [])
+                    + (["slow"] if bucket.has_slow else []),
                     "sql_full": bucket.sample_sql,
+                    "origin_blocks": (
+                        [
+                            {
+                                "origin": callsite,
+                                "code_line": bucket.callsite_code_by_origin.get(callsite, ""),
+                                "stack_lines": bucket.callsite_stack_by_origin.get(callsite, []),
+                                "context_lines": bucket.callsite_context_by_origin.get(
+                                    callsite,
+                                    [],
+                                ),
+                                "highlight_line": bucket.callsite_highlight_by_origin.get(callsite),
+                            }
+                            for callsite in sorted(bucket.callsites)[:3]
+                        ]
+                        + (
+                            [
+                                {
+                                    "origin": f"... +{len(bucket.callsites) - 3} more origins",
+                                    "code_line": "",
+                                    "stack_lines": [],
+                                    "context_lines": [],
+                                    "highlight_line": None,
+                                }
+                            ]
+                            if len(bucket.callsites) > 3
+                            else []
+                        )
+                        if bucket.callsites
+                        else [
+                            {
+                                "origin": "-",
+                                "code_line": "",
+                                "stack_lines": [],
+                                "context_lines": [],
+                                "highlight_line": None,
+                            }
+                        ]
+                    ),
                     "params": f"{len(bucket.params)} unique param sets",
                     "explain": "<br>".join(bucket.explain_plan),
                 }
@@ -373,14 +361,68 @@ def _build_query_rows(report: ProfileReport, ui: DashboardUIConfig) -> list[dict
                 {
                     "row_class": "timeline-row is-duplicate",
                     "step": str(index),
+                    "time_value": duplicate_bucket.total_ms,
                     "time": f"{avg_ms:.2f} each · {duplicate_bucket.total_ms:.2f} total",
+                    "time_label": (
+                        f"{avg_ms:.2f} ms each · {duplicate_bucket.total_ms:.2f} ms total"
+                    ),
                     "rowcount": "-",
                     "flags": duplicate_flags,
-                    "sql_preview": _short_sql(
-                        duplicate_bucket.sample_sql,
-                        max_len=ui.sql_preview_max_length,
+                    "count_label": (
+                        f"×{duplicate_bucket.count}" if duplicate_bucket.count > 1 else ""
                     ),
+                    "filter_tags": ["duplicate"]
+                    + (["critical"] if duplicate_bucket.has_critical else [])
+                    + (["slow"] if duplicate_bucket.has_slow else []),
                     "sql_full": duplicate_bucket.sample_sql,
+                    "origin_blocks": (
+                        [
+                            {
+                                "origin": callsite,
+                                "code_line": duplicate_bucket.callsite_code_by_origin.get(
+                                    callsite,
+                                    "",
+                                ),
+                                "stack_lines": duplicate_bucket.callsite_stack_by_origin.get(
+                                    callsite,
+                                    [],
+                                ),
+                                "context_lines": duplicate_bucket.callsite_context_by_origin.get(
+                                    callsite,
+                                    [],
+                                ),
+                                "highlight_line": duplicate_bucket.callsite_highlight_by_origin.get(
+                                    callsite
+                                ),
+                            }
+                            for callsite in sorted(duplicate_bucket.callsites)[:3]
+                        ]
+                        + (
+                            [
+                                {
+                                    "origin": (
+                                        f"... +{len(duplicate_bucket.callsites) - 3} more origins"
+                                    ),
+                                    "code_line": "",
+                                    "stack_lines": [],
+                                    "context_lines": [],
+                                    "highlight_line": None,
+                                }
+                            ]
+                            if len(duplicate_bucket.callsites) > 3
+                            else []
+                        )
+                        if duplicate_bucket.callsites
+                        else [
+                            {
+                                "origin": "-",
+                                "code_line": "",
+                                "stack_lines": [],
+                                "context_lines": [],
+                                "highlight_line": None,
+                            }
+                        ]
+                    ),
                     "params": duplicate_bucket.params,
                     "explain": "<br>".join(duplicate_bucket.explain_plan),
                 }
@@ -392,30 +434,50 @@ def _build_query_rows(report: ProfileReport, ui: DashboardUIConfig) -> list[dict
             row_flags.append({"class_name": "badge-critical", "text": "critical"})
         if query.is_slow:
             row_flags.append({"class_name": "badge-slow", "text": "slow"})
-        if query.is_duplicate:
-            row_flags.append({"class_name": "badge-duplicate", "text": "duplicate"})
-        if query.is_n_plus_one:
-            row_flags.append({"class_name": "badge-nplus1", "text": "n+1"})
 
         row_class = "timeline-row"
         if query.is_critical:
             row_class += " is-critical"
         elif query.is_slow:
             row_class += " is-slow"
-        elif query.is_n_plus_one:
-            row_class += " is-nplus1"
-        elif query.is_duplicate:
-            row_class += " is-duplicate"
 
         rows.append(
             {
                 "row_class": row_class,
                 "step": str(index),
+                "time_value": query.duration_ms,
                 "time": f"{query.duration_ms:.2f}",
+                "time_label": f"{query.duration_ms:.2f} ms",
                 "rowcount": "-" if query.rowcount is None else str(query.rowcount),
                 "flags": row_flags,
-                "sql_preview": _short_sql(query.statement, max_len=ui.sql_preview_max_length),
+                "count_label": "",
+                "filter_tags": [
+                    flag["text"]
+                    for flag in row_flags
+                    if flag["text"] in {"critical", "slow", "n+1", "duplicate"}
+                ],
                 "sql_full": query.statement,
+                "origin_blocks": (
+                    [
+                        {
+                            "origin": query.callsite,
+                            "code_line": query.callsite_code,
+                            "stack_lines": query.callsite_stack,
+                            "context_lines": query.callsite_context,
+                            "highlight_line": query.callsite_highlight_line,
+                        }
+                    ]
+                    if query.callsite
+                    else [
+                        {
+                            "origin": "-",
+                            "code_line": "",
+                            "stack_lines": [],
+                            "context_lines": [],
+                            "highlight_line": None,
+                        }
+                    ]
+                ),
                 "params": query.params,
                 "explain": "<br>".join(query.explain_plan),
             }
@@ -504,7 +566,6 @@ def render_reports_dashboard(
                     "value": str(selected_report.query_analysis.n_plus_one_query_count),
                 },
             ],
-            "analysis_cards": _build_query_analysis_cards(selected_report, ui),
             "query_rows": _build_query_rows(selected_report, ui),
             "pyinstrument_text": selected_report.pyinstrument_text,
         }
@@ -531,12 +592,12 @@ def render_reports_dashboard(
             "tooltip": "Captured SQL statement (click to expand when trimmed).",
         },
         {
-            "label": "Params",
-            "tooltip": "Captured query parameters.",
+            "label": "Origin",
+            "tooltip": "Best-effort app callsite that triggered this query.",
         },
         {
-            "label": "EXPLAIN",
-            "tooltip": "EXPLAIN QUERY PLAN rows when enabled.",
+            "label": "Context",
+            "tooltip": "Captured params and EXPLAIN plan details.",
         },
     ]
 

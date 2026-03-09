@@ -12,7 +12,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import String, create_engine, func, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
-from fastapi_silk_profiler import ProfilerConfig, QueryAnalysisConfig, setup_silk_profiler
+from fastapi_silk_profiler import (
+    ProfilerConfig,
+    QueryAnalysisConfig,
+    SQLCaptureConfig,
+    setup_silk_profiler,
+)
 
 
 class Base(DeclarativeBase):
@@ -77,6 +82,7 @@ store = setup_silk_profiler(
     config=ProfilerConfig(
         enabled=True,
         capture_sql=True,
+        sql_capture=SQLCaptureConfig(capture_callsite=True),
         query_analysis=QueryAnalysisConfig(
             enabled=True,
             slow_query_threshold_ms=1.0,

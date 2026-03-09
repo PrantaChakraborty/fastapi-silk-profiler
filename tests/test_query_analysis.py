@@ -7,7 +7,12 @@ from dataclasses import replace
 from fastapi_silk_profiler.config import DashboardUIConfig
 from fastapi_silk_profiler.models import ProfileReport, SQLQueryRecord
 from fastapi_silk_profiler.query_analysis import QueryAnalysisConfig, analyze_queries, normalize_sql
-from fastapi_silk_profiler.renderers import render_reports_dashboard, render_text
+from fastapi_silk_profiler.renderers import (
+    _build_query_rows,
+    _short_sql,
+    render_reports_dashboard,
+    render_text,
+)
 from fastapi_silk_profiler.sql_capture import (
     SQLCaptureOptions,
     _after_cursor_execute,
@@ -220,32 +225,6 @@ def test_renderers_include_query_analysis_flags_and_explain() -> None:
     assert "badge-slow" in html_payload
     assert "badge-duplicate" in html_payload
     assert "badge-nplus1" in html_payload
-    assert "Top Slow Query Offenders" in html_payload
-    assert "Top Duplicate Query Offenders" in html_payload
-    assert "N+1 Query Groups (Collapsed)" in html_payload
-
-
-def test_renderers_show_empty_group_cards_without_flags() -> None:
-    report = ProfileReport(
-        method="GET",
-        path="/items",
-        status_code=200,
-        duration_ms=20,
-        sql_queries=[
-            SQLQueryRecord(statement="select 1", params="{}", duration_ms=1, rowcount=1),
-        ],
-    )
-
-    html_payload = render_reports_dashboard(
-        [report],
-        report,
-        "/_silk/reports",
-        "/_silk/reports/clear",
-    )
-
-    assert "No slow queries flagged." in html_payload
-    assert "No duplicate query groups flagged." in html_payload
-    assert "No N+1 patterns flagged." in html_payload
 
 
 def test_capture_explain_plan_branch_guards_and_failures() -> None:
@@ -521,6 +500,98 @@ def test_sql_capture_respects_max_queries_per_request() -> None:
     assert collector[0].statement == "select 1"
 
 
+def test_sql_capture_callsite_disabled_by_default() -> None:
+    conn = _FakeConnection(dialect_name="sqlite")
+    collector, token = start_sql_capture()
+    try:
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 1",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+        _after_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 1",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+    finally:
+        stop_sql_capture(token)
+
+    assert len(collector) == 1
+    assert collector[0].callsite == ""
+
+
+def test_sql_capture_callsite_enabled_populates_origin() -> None:
+    conn = _FakeConnection(dialect_name="sqlite")
+    collector, token = start_sql_capture(SQLCaptureOptions(capture_callsite=True))
+    try:
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 1",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+        _after_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 1",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+    finally:
+        stop_sql_capture(token)
+
+    assert len(collector) == 1
+    assert collector[0].callsite
+    assert "test_query_analysis.py" in collector[0].callsite
+    assert collector[0].callsite_stack
+    assert any("test_query_analysis.py" in line for line in collector[0].callsite_stack)
+    assert collector[0].callsite_code
+
+
+def test_sql_capture_callsite_context_captures_function_source_with_highlight() -> None:
+    conn = _FakeConnection(dialect_name="sqlite")
+    collector, token = start_sql_capture(
+        SQLCaptureOptions(
+            capture_callsite=True,
+            capture_callsite_context=True,
+            callsite_context_max_lines=30,
+        )
+    )
+    try:
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 1",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+        _after_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 1",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+    finally:
+        stop_sql_capture(token)
+
+    assert len(collector) == 1
+    assert collector[0].callsite_context
+    assert collector[0].callsite_highlight_line is not None
+
+
 def test_handle_error_pops_stale_timing_frame() -> None:
     conn = _FakeConnection(dialect_name="sqlite")
     conn.info["_silk_query_timings"] = [("select 1", 1.0), ("select bad", 2.0)]
@@ -601,5 +672,196 @@ def test_reports_dashboard_respects_ui_config() -> None:
     assert "$default_pyinstrument_expanded" not in payload
     assert "title=\"Execution sequence index within this request.\"" not in payload
     assert "report-item active is-noise" not in payload
-    assert "sql-detail" in payload
     assert "sql-preview" in payload
+
+
+def test_renderers_include_callsite_in_sql_timeline_rows() -> None:
+    report = ProfileReport(
+        method="GET",
+        path="/items",
+        status_code=200,
+        duration_ms=20,
+        sql_queries=[
+            SQLQueryRecord(
+                statement="select 1",
+                params="{}",
+                duration_ms=2,
+                rowcount=1,
+                callsite="app/repository.py:42 in fetch_items",
+                callsite_code="items = session.execute(stmt).all()",
+                callsite_stack=[
+                    "app/api.py:12 in endpoint",
+                    "└─ app/repository.py:42 in fetch_items",
+                ],
+            ),
+            SQLQueryRecord(
+                statement="select 1",
+                params="{}",
+                duration_ms=3,
+                rowcount=1,
+                callsite="app/repository.py:42 in fetch_items",
+                callsite_code="items = session.execute(stmt).all()",
+                callsite_stack=[
+                    "app/api.py:12 in endpoint",
+                    "└─ app/repository.py:42 in fetch_items",
+                ],
+            ),
+        ],
+    )
+    payload = render_reports_dashboard(
+        reports=[report],
+        selected_report=report,
+        detail_base_path="/_silk/reports",
+        clear_path="/_silk/reports/clear",
+    )
+
+    assert "Origin" in payload
+    assert "app/repository.py:42 in fetch_items" in payload
+    assert "items = session.execute(stmt).all()" in payload
+    assert "app/api.py:12 in endpoint" in payload
+    assert "└─ app/repository.py:42 in fetch_items" in payload
+
+
+def test_render_text_includes_callsite_and_source_when_present() -> None:
+    report = ProfileReport(
+        method="GET",
+        path="/items",
+        status_code=200,
+        duration_ms=5,
+        sql_queries=[
+            SQLQueryRecord(
+                statement="select 1",
+                params="{}",
+                duration_ms=1,
+                rowcount=1,
+                callsite="app/repo.py:10 in fetch",
+                callsite_code="session.execute(stmt)",
+            )
+        ],
+    )
+    payload = render_text(report)
+    assert "Callsite: app/repo.py:10 in fetch" in payload
+    assert "Source: session.execute(stmt)" in payload
+
+
+def test_render_text_includes_critical_flag() -> None:
+    report = ProfileReport(
+        method="GET",
+        path="/critical",
+        status_code=200,
+        duration_ms=5,
+        sql_queries=[
+            SQLQueryRecord(
+                statement="select 1",
+                params="{}",
+                duration_ms=4,
+                rowcount=1,
+                is_critical=True,
+            )
+        ],
+    )
+
+    payload = render_text(report)
+    assert "flags=critical" in payload
+
+
+def test_short_sql_compacts_and_truncates() -> None:
+    assert _short_sql("SELECT  1") == "SELECT 1"
+    assert _short_sql("SELECT abcdef", max_len=8) == "SELECT ..."
+
+
+def test_build_query_rows_collapse_n_plus_one_with_origin_context() -> None:
+    report = ProfileReport(
+        method="GET",
+        path="/items",
+        status_code=200,
+        duration_ms=10,
+        sql_queries=[
+            SQLQueryRecord(
+                statement="SELECT description FROM items WHERE id = ?",
+                params="(1,)",
+                duration_ms=1.2,
+                rowcount=1,
+                normalized_statement="select description from items where id = ?",
+                is_n_plus_one=True,
+                is_critical=True,
+                callsite="app.py:10 in load_items",
+                callsite_code="session.scalar(stmt)",
+                callsite_context=["def load_items():", "    session.scalar(stmt)"],
+                callsite_highlight_line=2,
+            ),
+            SQLQueryRecord(
+                statement="SELECT description FROM items WHERE id = ?",
+                params="(2,)",
+                duration_ms=1.8,
+                rowcount=1,
+                normalized_statement="select description from items where id = ?",
+                is_n_plus_one=True,
+                callsite="app.py:10 in load_items",
+                callsite_code="session.scalar(stmt)",
+                callsite_context=["def load_items():", "    session.scalar(stmt)"],
+                callsite_highlight_line=2,
+            ),
+        ],
+    )
+
+    rows = _build_query_rows(report, DashboardUIConfig())
+    assert len(rows) == 1
+    assert rows[0]["row_class"] == "timeline-row is-nplus1"
+    assert rows[0]["flags"][0]["text"] == "critical"
+    assert rows[0]["origin_blocks"][0]["origin"] == "app.py:10 in load_items"
+    assert rows[0]["origin_blocks"][0]["context_lines"] == [
+        "def load_items():",
+        "    session.scalar(stmt)",
+    ]
+    assert rows[0]["origin_blocks"][0]["highlight_line"] == 2
+
+
+def test_build_query_rows_duplicate_uses_slow_flag_and_origin_context() -> None:
+    report = ProfileReport(
+        method="GET",
+        path="/items",
+        status_code=200,
+        duration_ms=10,
+        sql_queries=[
+            SQLQueryRecord(
+                statement="SELECT name FROM items WHERE id = ?",
+                params="(1,)",
+                duration_ms=0.3,
+                rowcount=1,
+                normalized_statement="select name from items where id = ?",
+                is_duplicate=True,
+                is_slow=True,
+                callsite="app.py:20 in load_names",
+                callsite_code="session.scalar(stmt)",
+                callsite_context=["def load_names():", "    session.scalar(stmt)"],
+                callsite_highlight_line=2,
+                explain_plan=["SCAN items"],
+            ),
+            SQLQueryRecord(
+                statement="SELECT name FROM items WHERE id = ?",
+                params="(1,)",
+                duration_ms=0.4,
+                rowcount=1,
+                normalized_statement="select name from items where id = ?",
+                is_duplicate=True,
+                callsite="app.py:20 in load_names",
+                callsite_code="session.scalar(stmt)",
+                callsite_context=["def load_names():", "    session.scalar(stmt)"],
+                callsite_highlight_line=2,
+            ),
+        ],
+    )
+
+    rows = _build_query_rows(report, DashboardUIConfig())
+    assert len(rows) == 1
+    assert rows[0]["row_class"] == "timeline-row is-duplicate"
+    assert rows[0]["flags"][0]["text"] == "slow"
+    assert rows[0]["flags"][1]["text"] == "duplicate x2"
+    assert rows[0]["origin_blocks"][0]["origin"] == "app.py:20 in load_names"
+    assert rows[0]["origin_blocks"][0]["context_lines"] == [
+        "def load_names():",
+        "    session.scalar(stmt)",
+    ]
+    assert rows[0]["origin_blocks"][0]["highlight_line"] == 2
+    assert rows[0]["explain"] == "SCAN items"

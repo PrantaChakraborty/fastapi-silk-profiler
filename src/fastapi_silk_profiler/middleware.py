@@ -72,6 +72,10 @@ class SilkProfilerMiddleware(BaseHTTPMiddleware):
                     max_queries_per_request=self._config.sql_capture.max_queries_per_request,
                     max_sql_length=self._config.sql_capture.max_sql_length,
                     max_params_length=self._config.sql_capture.max_params_length,
+                    capture_callsite=self._config.sql_capture.capture_callsite,
+                    capture_callsite_stack=self._config.sql_capture.capture_callsite_stack,
+                    capture_callsite_context=self._config.sql_capture.capture_callsite_context,
+                    callsite_context_max_lines=self._config.sql_capture.callsite_context_max_lines,
                 )
             )
 

@@ -28,6 +28,16 @@ def _sql_rows_to_records(rows: Sequence[sqlite3.Row]) -> list[SQLQueryRecord]:
             params=str(row["params"]),
             duration_ms=float(row["duration_ms"]),
             rowcount=int(row["rowcount"]) if row["rowcount"] is not None else None,
+            callsite=str(row["callsite"] or ""),
+            callsite_code=str(row["callsite_code"] or ""),
+            callsite_stack=json.loads(str(row["callsite_stack_json"] or "[]")),
+            callsite_context=json.loads(str(row["callsite_context_json"] or "[]")),
+            callsite_highlight_line=(
+                int(row["callsite_highlight_line"])
+                if row["callsite_highlight_line"] is not None
+                and int(row["callsite_highlight_line"]) > 0
+                else None
+            ),
             params_signature=str(row["params_signature"] or ""),
             normalized_statement=str(row["normalized_statement"] or ""),
             is_slow=bool(row["is_slow"]),
@@ -167,6 +177,11 @@ class SQLiteReportStore:
                     params TEXT NOT NULL,
                     duration_ms REAL NOT NULL,
                     rowcount INTEGER,
+                    callsite TEXT NOT NULL DEFAULT '',
+                    callsite_code TEXT NOT NULL DEFAULT '',
+                    callsite_stack_json TEXT NOT NULL DEFAULT '[]',
+                    callsite_context_json TEXT NOT NULL DEFAULT '[]',
+                    callsite_highlight_line INTEGER,
                     params_signature TEXT NOT NULL DEFAULT '',
                     normalized_statement TEXT NOT NULL DEFAULT '',
                     is_slow INTEGER NOT NULL DEFAULT 0,
@@ -188,6 +203,36 @@ class SQLiteReportStore:
                 column="query_analysis_json",
                 sql_type="TEXT",
                 default_sql="'{}'",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="callsite",
+                sql_type="TEXT",
+                default_sql="''",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="callsite_code",
+                sql_type="TEXT",
+                default_sql="''",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="callsite_stack_json",
+                sql_type="TEXT",
+                default_sql="'[]'",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="callsite_context_json",
+                sql_type="TEXT",
+                default_sql="'[]'",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="callsite_highlight_line",
+                sql_type="INTEGER",
+                default_sql="0",
             )
             self._ensure_column(
                 table="sql_queries",
@@ -274,11 +319,13 @@ class SQLiteReportStore:
             self._conn.executemany(
                 """
                 INSERT INTO sql_queries (
-                    report_id, position, statement, params, duration_ms, rowcount,
+                    report_id, position, statement, params, duration_ms, rowcount, callsite,
+                    callsite_code, callsite_stack_json, callsite_context_json,
+                    callsite_highlight_line,
                     params_signature, normalized_statement, is_slow, is_critical,
                     is_duplicate, is_n_plus_one, sql_truncated, params_truncated, explain_plan
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -288,6 +335,11 @@ class SQLiteReportStore:
                         query.params,
                         query.duration_ms,
                         query.rowcount,
+                        query.callsite,
+                        query.callsite_code,
+                        json.dumps(query.callsite_stack),
+                        json.dumps(query.callsite_context),
+                        query.callsite_highlight_line or 0,
                         query.params_signature,
                         query.normalized_statement,
                         int(query.is_slow),
@@ -414,7 +466,10 @@ class SQLiteReportStore:
         """
         sql_rows = self._conn.execute(
             """
-            SELECT statement, params, duration_ms, rowcount, params_signature
+            SELECT statement, params, duration_ms, rowcount
+                   ,callsite, callsite_code, callsite_stack_json, callsite_context_json
+                   ,callsite_highlight_line
+                   ,params_signature
                    ,normalized_statement, is_slow, is_critical
                    ,is_duplicate, is_n_plus_one, sql_truncated, params_truncated, explain_plan
             FROM sql_queries
