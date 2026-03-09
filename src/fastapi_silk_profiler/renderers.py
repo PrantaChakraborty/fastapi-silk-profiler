@@ -2,35 +2,31 @@
 
 from __future__ import annotations
 
-import html
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field
 from functools import cache
-from importlib.resources import files
-from string import Template
+from typing import Any
+
+from jinja2 import Environment, PackageLoader, Template, select_autoescape
 
 from .config import DashboardUIConfig
 from .models import ProfileReport
 
 
 @cache
-def _load_template(template_name: str) -> Template:
-    """Load one HTML template from packaged resources.
-
-    Args:
-        template_name: Template filename under templates/.
-
-    Returns:
-        Template: Compiled string template.
-    """
-    content = (
-        files("fastapi_silk_profiler")
-        .joinpath("templates")
-        .joinpath(template_name)
-        .read_text(encoding="utf-8")
+def _template_env() -> Environment:
+    """Build cached Jinja environment for package templates."""
+    return Environment(
+        loader=PackageLoader("fastapi_silk_profiler", "templates"),
+        autoescape=select_autoescape(enabled_extensions=("html", "xml"), default=True),
     )
-    return Template(content)
+
+
+@cache
+def _load_template(template_name: str) -> Template:
+    """Load one HTML template from packaged resources."""
+    return _template_env().get_template(template_name)
 
 
 def render_json(report: ProfileReport) -> dict[str, object]:
@@ -106,7 +102,7 @@ def render_pyinstrument_html(report: ProfileReport) -> str:
 
 
 def render_html_dashboard(report: ProfileReport) -> str:
-    """Render a dark observability-style HTML dashboard.
+    """Render latest report dashboard HTML.
 
     Args:
         report: Profile report.
@@ -114,54 +110,35 @@ def render_html_dashboard(report: ProfileReport) -> str:
     Returns:
         str: Styled dashboard HTML.
     """
-    queries_json = html.escape(
-        json.dumps(
-            [
-                {
-                    "statement": query.statement,
-                    "params": query.params,
-                    "duration_ms": query.duration_ms,
-                    "rowcount": query.rowcount,
-                    "normalized_statement": query.normalized_statement,
-                    "is_slow": query.is_slow,
-                    "is_critical": query.is_critical,
-                    "is_duplicate": query.is_duplicate,
-                    "is_n_plus_one": query.is_n_plus_one,
-                    "explain_plan": query.explain_plan,
-                }
-                for query in report.sql_queries
-            ],
-            indent=2,
-        )
+    queries_json = json.dumps(
+        [
+            {
+                "statement": query.statement,
+                "params": query.params,
+                "duration_ms": query.duration_ms,
+                "rowcount": query.rowcount,
+                "normalized_statement": query.normalized_statement,
+                "is_slow": query.is_slow,
+                "is_critical": query.is_critical,
+                "is_duplicate": query.is_duplicate,
+                "is_n_plus_one": query.is_n_plus_one,
+                "explain_plan": query.explain_plan,
+            }
+            for query in report.sql_queries
+        ],
+        indent=2,
     )
-    method_metric = (
-        "<div class=\\\"metric\\\"><div class=\\\"label\\\">Method</div>"
-        f"<div class=\\\"value\\\">{html.escape(report.method)}</div></div>"
-    )
-    path_metric = (
-        "<div class=\\\"metric\\\"><div class=\\\"label\\\">Path</div>"
-        f"<div class=\\\"value\\\">{html.escape(report.path)}</div></div>"
-    )
-    status_metric = (
-        "<div class=\\\"metric\\\"><div class=\\\"label\\\">Status</div>"
-        f"<div class=\\\"value\\\">{report.status_code}</div></div>"
-    )
-    duration_metric = (
-        "<div class=\\\"metric\\\"><div class=\\\"label\\\">Duration</div>"
-        f"<div class=\\\"value\\\">{report.duration_ms:.2f} ms</div></div>"
-    )
-    sql_count_metric = (
-        "<div class=\\\"metric\\\"><div class=\\\"label\\\">SQL Queries</div>"
-        f"<div class=\\\"value\\\">{len(report.sql_queries)}</div></div>"
-    )
-    return _load_template("latest_dashboard.html").substitute(
-        method_metric=method_metric,
-        path_metric=path_metric,
-        status_metric=status_metric,
-        duration_metric=duration_metric,
-        sql_count_metric=sql_count_metric,
+    metrics = [
+        {"label": "Method", "value": report.method},
+        {"label": "Path", "value": report.path},
+        {"label": "Status", "value": str(report.status_code)},
+        {"label": "Duration", "value": f"{report.duration_ms:.2f} ms"},
+        {"label": "SQL Queries", "value": str(len(report.sql_queries))},
+    ]
+    return _load_template("latest_dashboard.html").render(
+        metrics=metrics,
         queries_json=queries_json,
-        pyinstrument_text=html.escape(report.pyinstrument_text),
+        pyinstrument_text=report.pyinstrument_text,
     )
 
 
@@ -184,54 +161,33 @@ class _NPlusOneGroupBucket(_QueryGroupBucket):
     params: set[str] = field(default_factory=set)
 
 
-def _render_group_card(
-    title: str,
-    columns: list[str],
-    rows: list[list[str]],
-    empty_message: str,
-    show_tooltips: bool,
-) -> str:
-    """Render one query-analysis group card."""
-    tooltip_by_column = {
-        "Calls": "How many times this query pattern appeared in the request.",
-        "Total ms": "Total cumulative database time spent in this query pattern.",
-        "Max ms": "Slowest single execution time for this query pattern.",
-        "SQL": "Representative SQL statement for this group (truncated).",
-        "Unique Params": "How many distinct parameter sets were used for this pattern.",
-    }
-    if not rows:
-        return (
-            f"<section class=\"card\"><h3>{html.escape(title)}</h3>"
-            f"<div class=\"empty\">{html.escape(empty_message)}</div></section>"
-        )
-    headers = "".join(
-        (
-            "<th>"
-            + (
-                (
-                    f"<span title=\"{html.escape(tooltip_by_column.get(column, column))}\">"
-                    f"{html.escape(column)}</span>"
-                )
-                if show_tooltips
-                else html.escape(column)
-            )
-            + "</th>"
-        )
-        for column in columns
-    )
-    body_rows = []
-    for row in rows:
-        cells = "".join(f"<td>{html.escape(cell)}</td>" for cell in row)
-        body_rows.append(f"<tr>{cells}</tr>")
-    body = "".join(body_rows)
-    return (
-        f"<section class=\"card\"><h3>{html.escape(title)}</h3>"
-        f"<table><thead><tr>{headers}</tr></thead><tbody>{body}</tbody></table></section>"
-    )
+@dataclass(slots=True)
+class _NPlusOneTimelineBucket:
+    count: int = 0
+    total_ms: float = 0.0
+    sample_sql: str = ""
+    params: set[str] = field(default_factory=set)
+    explain_plan: list[str] = field(default_factory=list)
+    has_slow: bool = False
+    has_critical: bool = False
 
 
-def _render_query_analysis_groups(report: ProfileReport, dashboard_ui: DashboardUIConfig) -> str:
-    """Render grouped bottleneck analysis tables for one report."""
+@dataclass(slots=True)
+class _DuplicateTimelineBucket:
+    count: int = 0
+    total_ms: float = 0.0
+    sample_sql: str = ""
+    params: str = ""
+    explain_plan: list[str] = field(default_factory=list)
+    has_slow: bool = False
+    has_critical: bool = False
+
+
+def _build_query_analysis_cards(
+    report: ProfileReport,
+    dashboard_ui: DashboardUIConfig,
+) -> list[dict[str, Any]]:
+    """Build grouped bottleneck cards for dashboard template."""
     slow_groups: dict[str, _QueryGroupBucket] = defaultdict(_QueryGroupBucket)
     duplicate_groups: dict[tuple[str, str], _QueryGroupBucket] = defaultdict(_QueryGroupBucket)
     n_plus_one_groups: dict[str, _NPlusOneGroupBucket] = defaultdict(_NPlusOneGroupBucket)
@@ -287,78 +243,182 @@ def _render_query_analysis_groups(report: ProfileReport, dashboard_ui: Dashboard
             reverse=True,
         )[:5]
     ]
-    n_plus_one_rows: list[list[str]] = []
-    for _, bucket in sorted(
-        n_plus_one_groups.items(),
-        key=lambda item: item[1].total_ms,
-        reverse=True,
-    )[:5]:
-        n_plus_one_rows.append(
-            [
-                str(bucket.count),
-                str(len(bucket.params)),
-                f"{bucket.total_ms:.2f}",
-                f"{bucket.max_ms:.2f}",
-                _short_sql(bucket.sample_sql),
+    n_plus_one_rows = [
+        [
+            str(bucket.count),
+            str(len(bucket.params)),
+            f"{bucket.total_ms:.2f}",
+            f"{bucket.max_ms:.2f}",
+            _short_sql(bucket.sample_sql),
+        ]
+        for _, bucket in sorted(
+            n_plus_one_groups.items(),
+            key=lambda item: item[1].total_ms,
+            reverse=True,
+        )
+    ]
+    return [
+        {
+            "title": "Top Slow Query Offenders",
+            "columns": ["Calls", "Total ms", "Max ms", "SQL"],
+            "rows": slow_rows,
+            "empty_message": "No slow queries flagged.",
+        },
+        {
+            "title": "Top Duplicate Query Offenders",
+            "columns": ["Calls", "Total ms", "Max ms", "SQL"],
+            "rows": duplicate_rows,
+            "empty_message": "No duplicate query groups flagged.",
+        },
+        {
+            "title": "N+1 Query Groups (Collapsed)",
+            "columns": ["Calls", "Unique Params", "Total ms", "Max ms", "SQL"],
+            "rows": n_plus_one_rows,
+            "empty_message": "No N+1 patterns flagged.",
+        },
+    ]
+
+
+def _build_query_rows(report: ProfileReport, ui: DashboardUIConfig) -> list[dict[str, Any]]:
+    """Build SQL timeline rows for dashboard template."""
+    n_plus_one_buckets: dict[str, _NPlusOneTimelineBucket] = defaultdict(_NPlusOneTimelineBucket)
+    duplicate_buckets: dict[tuple[str, str], _DuplicateTimelineBucket] = defaultdict(
+        _DuplicateTimelineBucket
+    )
+
+    for query in report.sql_queries:
+        if query.is_n_plus_one:
+            key = query.normalized_statement or query.statement
+            bucket = n_plus_one_buckets[key]
+            bucket.count += 1
+            bucket.total_ms += query.duration_ms
+            bucket.params.add(query.params)
+            bucket.has_slow = bucket.has_slow or query.is_slow
+            bucket.has_critical = bucket.has_critical or query.is_critical
+            if not bucket.sample_sql:
+                bucket.sample_sql = query.statement
+            if not bucket.explain_plan and query.explain_plan:
+                bucket.explain_plan = query.explain_plan
+            continue
+        if query.is_duplicate:
+            dup_key = (query.normalized_statement or query.statement, query.params)
+            dup_bucket = duplicate_buckets[dup_key]
+            dup_bucket.count += 1
+            dup_bucket.total_ms += query.duration_ms
+            dup_bucket.has_slow = dup_bucket.has_slow or query.is_slow
+            dup_bucket.has_critical = dup_bucket.has_critical or query.is_critical
+            if not dup_bucket.sample_sql:
+                dup_bucket.sample_sql = query.statement
+                dup_bucket.params = query.params
+            if not dup_bucket.explain_plan and query.explain_plan:
+                dup_bucket.explain_plan = query.explain_plan
+
+    rows: list[dict[str, Any]] = []
+    emitted_n_plus_one_keys: set[str] = set()
+    emitted_duplicate_keys: set[tuple[str, str]] = set()
+
+    for index, query in enumerate(report.sql_queries, start=1):
+        n_plus_one_key = query.normalized_statement or query.statement
+        if query.is_n_plus_one:
+            if n_plus_one_key in emitted_n_plus_one_keys:
+                continue
+            emitted_n_plus_one_keys.add(n_plus_one_key)
+            bucket = n_plus_one_buckets[n_plus_one_key]
+            avg_ms = bucket.total_ms / bucket.count if bucket.count else 0.0
+            flags = [{"class_name": "badge-nplus1", "text": f"n+1 x{bucket.count}"}]
+            if bucket.has_critical:
+                flags.insert(0, {"class_name": "badge-critical", "text": "critical"})
+            elif bucket.has_slow:
+                flags.insert(0, {"class_name": "badge-slow", "text": "slow"})
+            rows.append(
+                {
+                    "row_class": "timeline-row is-nplus1",
+                    "step": str(index),
+                    "time": f"{avg_ms:.2f} each · {bucket.total_ms:.2f} total",
+                    "rowcount": "-",
+                    "flags": flags,
+                    "sql_preview": _short_sql(bucket.sample_sql, max_len=ui.sql_preview_max_length),
+                    "sql_full": bucket.sample_sql,
+                    "params": f"{len(bucket.params)} unique param sets",
+                    "explain": "<br>".join(bucket.explain_plan),
+                }
+            )
+            continue
+
+        if query.is_duplicate:
+            duplicate_key = (query.normalized_statement or query.statement, query.params)
+            if duplicate_key in emitted_duplicate_keys:
+                continue
+            emitted_duplicate_keys.add(duplicate_key)
+            duplicate_bucket = duplicate_buckets[duplicate_key]
+            avg_ms = (
+                duplicate_bucket.total_ms / duplicate_bucket.count
+                if duplicate_bucket.count
+                else 0.0
+            )
+            duplicate_flags = [
+                {
+                    "class_name": "badge-duplicate",
+                    "text": f"duplicate x{duplicate_bucket.count}",
+                }
             ]
+            if duplicate_bucket.has_critical:
+                duplicate_flags.insert(0, {"class_name": "badge-critical", "text": "critical"})
+            elif duplicate_bucket.has_slow:
+                duplicate_flags.insert(0, {"class_name": "badge-slow", "text": "slow"})
+            rows.append(
+                {
+                    "row_class": "timeline-row is-duplicate",
+                    "step": str(index),
+                    "time": f"{avg_ms:.2f} each · {duplicate_bucket.total_ms:.2f} total",
+                    "rowcount": "-",
+                    "flags": duplicate_flags,
+                    "sql_preview": _short_sql(
+                        duplicate_bucket.sample_sql,
+                        max_len=ui.sql_preview_max_length,
+                    ),
+                    "sql_full": duplicate_bucket.sample_sql,
+                    "params": duplicate_bucket.params,
+                    "explain": "<br>".join(duplicate_bucket.explain_plan),
+                }
+            )
+            continue
+
+        row_flags: list[dict[str, str]] = []
+        if query.is_critical:
+            row_flags.append({"class_name": "badge-critical", "text": "critical"})
+        if query.is_slow:
+            row_flags.append({"class_name": "badge-slow", "text": "slow"})
+        if query.is_duplicate:
+            row_flags.append({"class_name": "badge-duplicate", "text": "duplicate"})
+        if query.is_n_plus_one:
+            row_flags.append({"class_name": "badge-nplus1", "text": "n+1"})
+
+        row_class = "timeline-row"
+        if query.is_critical:
+            row_class += " is-critical"
+        elif query.is_slow:
+            row_class += " is-slow"
+        elif query.is_n_plus_one:
+            row_class += " is-nplus1"
+        elif query.is_duplicate:
+            row_class += " is-duplicate"
+
+        rows.append(
+            {
+                "row_class": row_class,
+                "step": str(index),
+                "time": f"{query.duration_ms:.2f}",
+                "rowcount": "-" if query.rowcount is None else str(query.rowcount),
+                "flags": row_flags,
+                "sql_preview": _short_sql(query.statement, max_len=ui.sql_preview_max_length),
+                "sql_full": query.statement,
+                "params": query.params,
+                "explain": "<br>".join(query.explain_plan),
+            }
         )
 
-    return "".join(
-        [
-            _render_group_card(
-                title="Top Slow Query Offenders",
-                columns=["Calls", "Total ms", "Max ms", "SQL"],
-                rows=slow_rows,
-                empty_message="No slow queries flagged.",
-                show_tooltips=dashboard_ui.show_column_tooltips,
-            ),
-            _render_group_card(
-                title="Top Duplicate Query Offenders",
-                columns=["Calls", "Total ms", "Max ms", "SQL"],
-                rows=duplicate_rows,
-                empty_message="No duplicate query groups flagged.",
-                show_tooltips=dashboard_ui.show_column_tooltips,
-            ),
-            _render_group_card(
-                title="Top N+1 Query Offenders",
-                columns=["Calls", "Unique Params", "Total ms", "Max ms", "SQL"],
-                rows=n_plus_one_rows,
-                empty_message="No N+1 patterns flagged.",
-                show_tooltips=dashboard_ui.show_column_tooltips,
-            ),
-        ]
-    )
-
-
-def _render_severity_chips(report: ProfileReport) -> str:
-    """Render one-line severity chips for fast triage."""
-    chips = [
-        (
-            "critical",
-            f"{report.query_analysis.critical_query_count} critical",
-        ),
-        (
-            "slow",
-            f"{report.query_analysis.slow_query_count} warnings",
-        ),
-        (
-            "nplus1",
-            f"{report.query_analysis.n_plus_one_query_count} n+1",
-        ),
-    ]
-    return "".join(
-        f"<span class=\"chip chip-{name}\">{html.escape(label)}</span>"
-        for name, label in chips
-    )
-
-
-def _render_local_time(value: str) -> str:
-    """Render a UTC timestamp placeholder that is localized in the browser."""
-    escaped = html.escape(value)
-    return (
-        f"<time class=\"js-local-time\" datetime=\"{escaped}\" "
-        f"title=\"UTC: {escaped}\">{escaped}</time>"
-    )
+    return rows
 
 
 def render_reports_dashboard(
@@ -382,159 +442,109 @@ def render_reports_dashboard(
     """
     ui = dashboard_ui if dashboard_ui is not None else DashboardUIConfig()
     selected_id = selected_report.id if selected_report is not None else ""
-    escaped_base_path = html.escape(detail_base_path)
-    escaped_clear_path = html.escape(clear_path)
-    list_items = []
-    for report in reports:
-        active_class = "active" if report.id == selected_id else ""
-        escaped_id = html.escape(report.id)
-        escaped_method = html.escape(report.method)
-        escaped_path = html.escape(report.path)
-        noise_class = (
-            " is-noise"
-            if ui.dim_favicon_requests and report.path == "/favicon.ico"
-            else ""
-        )
-        list_items.append(
-            f"<a class=\"report-item {active_class}{noise_class}\" "
-            f"href=\"{escaped_base_path}?report_id={escaped_id}\">"
-            f"<div class=\"request\">{escaped_method} {escaped_path}</div>"
-            f"<div class=\"meta\">{report.status_code} · {report.duration_ms:.2f} ms"
-            f" · {_render_local_time(report.created_at)}</div></a>"
-        )
-    report_list_html = (
-        "".join(list_items)
-        if list_items
-        else "<div class=\"empty\">No profile reports captured yet.</div>"
-    )
 
-    if selected_report is None:
-        details_html = "<div class=\"empty\">Select a request to inspect details.</div>"
-    else:
-        selected_method = html.escape(selected_report.method)
-        selected_path = html.escape(selected_report.path)
-        selected_created_at = _render_local_time(selected_report.created_at)
-        query_rows = []
-        for index, query in enumerate(selected_report.sql_queries, start=1):
-            escaped_statement = html.escape(query.statement)
-            escaped_params = html.escape(query.params)
-            escaped_short_statement = html.escape(
-                _short_sql(query.statement, max_len=ui.sql_preview_max_length)
-            )
-            escaped_explain = "<br>".join(html.escape(line) for line in query.explain_plan)
-            flags = []
-            if query.is_critical:
-                flags.append("<span class=\"badge badge-critical\">critical</span>")
-            if query.is_slow:
-                flags.append("<span class=\"badge badge-slow\">slow</span>")
-            if query.is_duplicate:
-                flags.append("<span class=\"badge badge-duplicate\">duplicate</span>")
-            if query.is_n_plus_one:
-                flags.append("<span class=\"badge badge-nplus1\">n+1</span>")
-            flags_text = " ".join(flags) if flags else "-"
-            rowcount_value = "-" if query.rowcount is None else str(query.rowcount)
-            if escaped_short_statement != escaped_statement:
-                sql_cell_html = (
-                    "<details class=\"sql-detail\">"
-                    "<summary>"
-                    f"<code class=\"sql-preview\">{escaped_short_statement}</code>"
-                    "</summary>"
-                    f"<code class=\"sql-full\">{escaped_statement}</code>"
-                    "</details>"
-                )
-            else:
-                sql_cell_html = f"<code class=\"sql-preview\">{escaped_statement}</code>"
-            row_class = "timeline-row"
-            if query.is_critical:
-                row_class += " is-critical"
-            elif query.is_slow:
-                row_class += " is-slow"
-            elif query.is_n_plus_one:
-                row_class += " is-nplus1"
-            elif query.is_duplicate:
-                row_class += " is-duplicate"
-            query_rows.append(
-                f"<tr class=\"{row_class}\">"
-                f"<td>{index}</td>"
-                f"<td>{query.duration_ms:.2f}</td>"
-                f"<td>{rowcount_value}</td>"
-                f"<td>{flags_text}</td>"
-                f"<td>{sql_cell_html}</td>"
-                f"<td><code>{escaped_params}</code></td>"
-                f"<td><code>{escaped_explain or '-'}</code></td>"
-                "</tr>"
-            )
-        if ui.show_column_tooltips:
-            timeline_headers = (
-                "<th><span title=\"Execution sequence index within this request.\">Step</span></th>"
-                "<th><span title=\"Execution time for this SQL statement in milliseconds.\">"
-                "Time (ms)</span></th>"
-                "<th><span title=\"Row count reported by driver; -1 often means not provided.\">"
-                "Rows</span></th>"
-                "<th><span title=\"Detected analysis tags for this query.\">Flags</span></th>"
-                "<th><span title=\"Captured SQL statement (click to expand when trimmed).\">"
-                "SQL</span></th>"
-                "<th><span title=\"Captured query parameters.\">Params</span></th>"
-                "<th><span title=\"EXPLAIN QUERY PLAN rows when enabled.\">EXPLAIN</span></th>"
-            )
-        else:
-            timeline_headers = (
-                "<th>Step</th><th>Time (ms)</th><th>Rows</th><th>Flags</th>"
-                "<th>SQL</th><th>Params</th><th>EXPLAIN</th>"
-            )
-        queries_table = (
-            ("<table><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>").format(
-                headers=timeline_headers,
-                rows="".join(query_rows),
-            )
-            if query_rows
-            else "<div class=\"empty\">No SQL queries captured for this request.</div>"
-        )
-        details_html = f"""
-        <div class="meta-strip">
-          <span><strong>{selected_method}</strong> {selected_path}</span>
-          <span>Status: <strong>{selected_report.status_code}</strong></span>
-          <span>Captured: <strong>{selected_created_at}</strong></span>
-        </div>
-        <div class="chip-row">
-          {_render_severity_chips(selected_report)}
-        </div>
-        <div class="summary-grid">
-          <div class="metric"><span>Total Time</span>
-            <strong>{selected_report.duration_ms:.2f} ms</strong></div>
-          <div class="metric"><span>Total DB Time</span>
-            <strong>{selected_report.query_analysis.total_db_time_ms:.2f} ms</strong></div>
-          <div class="metric"><span>DB Time Ratio</span>
-            <strong>{selected_report.query_analysis.db_time_ratio:.2%}</strong></div>
-          <div class="metric"><span>Slow Queries</span>
-            <strong>{selected_report.query_analysis.slow_query_count}</strong></div>
-          <div class="metric"><span>Duplicate Queries</span>
-            <strong>{selected_report.query_analysis.duplicate_query_count}</strong></div>
-          <div class="metric"><span>N+1 Queries</span>
-            <strong>{selected_report.query_analysis.n_plus_one_query_count}</strong></div>
-        </div>
-        {_render_query_analysis_groups(selected_report, ui)}
-        <section class="card">
-          <h3>SQL Timeline</h3>
-          {queries_table}
-        </section>
-        <section class="card">
-          <h3>Pyinstrument</h3>
-          <button id="toggle-pyinstrument-btn" class="btn-secondary" type="button">
-            Show Pyinstrument Trace
-          </button>
-          <div id="pyinstrument-panel" hidden></div>
-          <template id="pyinstrument-template">
-            <pre>{html.escape(selected_report.pyinstrument_text)}</pre>
-          </template>
-        </section>
-        """
+    report_items = [
+        {
+            "id": report.id,
+            "method": report.method,
+            "path": report.path,
+            "status_code": report.status_code,
+            "duration_ms": f"{report.duration_ms:.2f}",
+            "created_at": report.created_at,
+            "active": report.id == selected_id,
+            "is_noise": ui.dim_favicon_requests and report.path == "/favicon.ico",
+        }
+        for report in reports
+    ]
 
-    return _load_template("reports_dashboard.html").substitute(
-        report_count=str(len(reports)),
-        report_list_html=report_list_html,
-        details_html=details_html,
-        escaped_clear_path=escaped_clear_path,
+    details: dict[str, Any] | None = None
+    if selected_report is not None:
+        details = {
+            "method": selected_report.method,
+            "path": selected_report.path,
+            "status_code": selected_report.status_code,
+            "created_at": selected_report.created_at,
+            "chips": [
+                {
+                    "class_name": "chip-critical",
+                    "text": f"{selected_report.query_analysis.critical_query_count} critical",
+                },
+                {
+                    "class_name": "chip-slow",
+                    "text": f"{selected_report.query_analysis.slow_query_count} warnings",
+                },
+                {
+                    "class_name": "chip-nplus1",
+                    "text": f"{selected_report.query_analysis.n_plus_one_query_count} n+1",
+                },
+            ],
+            "metrics": [
+                {"label": "Total Time", "value": f"{selected_report.duration_ms:.2f} ms"},
+                {
+                    "label": "Total DB Time",
+                    "value": f"{selected_report.query_analysis.total_db_time_ms:.2f} ms",
+                },
+                {
+                    "label": "DB Time Ratio",
+                    "value": f"{selected_report.query_analysis.db_time_ratio:.2%}",
+                },
+                {
+                    "label": "Slow Queries",
+                    "value": str(selected_report.query_analysis.slow_query_count),
+                },
+                {
+                    "label": "Duplicate Queries",
+                    "value": str(selected_report.query_analysis.duplicate_query_count),
+                },
+                {
+                    "label": "N+1 Queries",
+                    "value": str(selected_report.query_analysis.n_plus_one_query_count),
+                },
+            ],
+            "analysis_cards": _build_query_analysis_cards(selected_report, ui),
+            "query_rows": _build_query_rows(selected_report, ui),
+            "pyinstrument_text": selected_report.pyinstrument_text,
+        }
+
+    timeline_headers = [
+        {
+            "label": "Step",
+            "tooltip": "Execution sequence index within this request.",
+        },
+        {
+            "label": "Time (ms)",
+            "tooltip": "Execution time for this SQL statement in milliseconds.",
+        },
+        {
+            "label": "Rows",
+            "tooltip": "Row count reported by driver; -1 often means not provided.",
+        },
+        {
+            "label": "Flags",
+            "tooltip": "Detected analysis tags for this query.",
+        },
+        {
+            "label": "SQL",
+            "tooltip": "Captured SQL statement (click to expand when trimmed).",
+        },
+        {
+            "label": "Params",
+            "tooltip": "Captured query parameters.",
+        },
+        {
+            "label": "EXPLAIN",
+            "tooltip": "EXPLAIN QUERY PLAN rows when enabled.",
+        },
+    ]
+
+    return _load_template("reports_dashboard.html").render(
+        report_count=len(reports),
+        report_items=report_items,
+        detail_base_path=detail_base_path,
+        details=details,
+        timeline_headers=timeline_headers,
+        show_column_tooltips=ui.show_column_tooltips,
+        escaped_clear_path=clear_path,
         default_requests_collapsed="1" if ui.default_requests_collapsed else "0",
         default_pyinstrument_expanded="1" if ui.default_pyinstrument_expanded else "0",
     )

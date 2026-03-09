@@ -77,20 +77,21 @@ h2 { color: var(--accent); font-size: 14px; letter-spacing: 1px; }
     <h1 class="title">fastapi-silk-profiler</h1>
     <div class="card">
       <div class="grid">
-        $method_metric
-        $path_metric
-        $status_metric
-        $duration_metric
-        $sql_count_metric
+        {% for metric in metrics %}
+        <div class="metric">
+          <div class="label">{{ metric.label }}</div>
+          <div class="value">{{ metric.value }}</div>
+        </div>
+        {% endfor %}
       </div>
     </div>
     <div class="card">
       <h2>Captured SQL</h2>
-      <pre><code>$queries_json</code></pre>
+      <pre><code>{{ queries_json }}</code></pre>
     </div>
     <div class="card">
       <h2>Pyinstrument (Text)</h2>
-      <pre>$pyinstrument_text</pre>
+      <pre>{{ pyinstrument_text }}</pre>
     </div>
   </div>
 </body>

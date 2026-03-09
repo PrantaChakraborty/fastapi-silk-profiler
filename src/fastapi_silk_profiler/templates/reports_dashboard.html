@@ -388,17 +388,146 @@ code { color: var(--code-color); }
     <div id="dashboard-layout" class="layout">
       <section id="requests-panel" class="card">
         <div class="panel-header">
-          <h2 class="panel-title-tight">Captured Requests ($report_count)</h2>
+          <h2 class="panel-title-tight">Captured Requests ({{ report_count }})</h2>
           <button id="toggle-requests-btn" class="btn-secondary icon-btn" type="button"
             title="Collapse request list" aria-label="Collapse request list">Hide Requests</button>
         </div>
-        <div class="list">$report_list_html</div>
+        <div class="list">
+          {% if report_items %}
+          {% for item in report_items %}
+          <a class="report-item{% if item.active %} active{% endif %}{% if item.is_noise %} is-noise{% endif %}"
+             href="{{ detail_base_path }}?report_id={{ item.id }}">
+            <div class="request">{{ item.method }} {{ item.path }}</div>
+            <div class="meta">{{ item.status_code }} · {{ item.duration_ms }} ms
+              · <time class="js-local-time" datetime="{{ item.created_at }}" title="UTC: {{ item.created_at }}">{{ item.created_at }}</time>
+            </div>
+          </a>
+          {% endfor %}
+          {% else %}
+          <div class="empty">No profile reports captured yet.</div>
+          {% endif %}
+        </div>
       </section>
       <section class="card">
         <button id="toggle-requests-btn-collapsed" class="btn-secondary icon-btn" type="button"
           title="Expand request list" aria-label="Expand request list">Show Requests</button>
         <h2 class="panel-title">Request Details</h2>
-        $details_html
+        {% if details %}
+        <div class="meta-strip">
+          <span><strong>{{ details.method }}</strong> {{ details.path }}</span>
+          <span>Status: <strong>{{ details.status_code }}</strong></span>
+          <span>Captured:
+            <strong><time class="js-local-time" datetime="{{ details.created_at }}" title="UTC: {{ details.created_at }}">{{ details.created_at }}</time></strong>
+          </span>
+        </div>
+        <div class="chip-row">
+          {% for chip in details.chips %}
+          <span class="chip {{ chip.class_name }}">{{ chip.text }}</span>
+          {% endfor %}
+        </div>
+        <div class="summary-grid">
+          {% for metric in details.metrics %}
+          <div class="metric"><span>{{ metric.label }}</span><strong>{{ metric.value }}</strong></div>
+          {% endfor %}
+        </div>
+        {% for card in details.analysis_cards %}
+        <section class="card">
+          <h3>{{ card.title }}</h3>
+          {% if card.rows %}
+          <table>
+            <thead>
+              <tr>
+                {% for column in card.columns %}
+                <th>
+                  {% if show_column_tooltips %}
+                  <span title="{% if column == 'Calls' %}How many times this query pattern appeared in the request.{% elif column == 'Total ms' %}Total cumulative database time spent in this query pattern.{% elif column == 'Max ms' %}Slowest single execution time for this query pattern.{% elif column == 'SQL' %}Representative SQL statement for this group (truncated).{% elif column == 'Unique Params' %}How many distinct parameter sets were used for this pattern.{% else %}{{ column }}{% endif %}">{{ column }}</span>
+                  {% else %}
+                  {{ column }}
+                  {% endif %}
+                </th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in card.rows %}
+              <tr>
+                {% for cell in row %}
+                <td>{{ cell }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <div class="empty">{{ card.empty_message }}</div>
+          {% endif %}
+        </section>
+        {% endfor %}
+        <section class="card">
+          <h3>SQL Timeline</h3>
+          {% if details.query_rows %}
+          <table>
+            <thead>
+              <tr>
+                {% for header in timeline_headers %}
+                <th>
+                  {% if show_column_tooltips %}
+                  <span title="{{ header.tooltip }}">{{ header.label }}</span>
+                  {% else %}
+                  {{ header.label }}
+                  {% endif %}
+                </th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in details.query_rows %}
+              <tr class="{{ row.row_class }}">
+                <td>{{ row.step }}</td>
+                <td>{{ row.time }}</td>
+                <td>{{ row.rowcount }}</td>
+                <td>
+                  {% if row.flags %}
+                    {% for flag in row.flags %}
+                    <span class="badge {{ flag.class_name }}">{{ flag.text }}</span>
+                    {% endfor %}
+                  {% else %}
+                  -
+                  {% endif %}
+                </td>
+                <td>
+                  {% if row.sql_preview != row.sql_full %}
+                  <details class="sql-detail">
+                    <summary><code class="sql-preview">{{ row.sql_preview }}</code></summary>
+                    <code class="sql-full">{{ row.sql_full }}</code>
+                  </details>
+                  {% else %}
+                  <code class="sql-preview">{{ row.sql_full }}</code>
+                  {% endif %}
+                </td>
+                <td><code>{{ row.params }}</code></td>
+                <td><code>{{ row.explain|safe if row.explain else '-' }}</code></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <div class="empty">No SQL queries captured for this request.</div>
+          {% endif %}
+        </section>
+        <section class="card">
+          <h3>Pyinstrument</h3>
+          <button id="toggle-pyinstrument-btn" class="btn-secondary" type="button">
+            Show Pyinstrument Trace
+          </button>
+          <div id="pyinstrument-panel" hidden></div>
+          <template id="pyinstrument-template">
+            <pre>{{ details.pyinstrument_text }}</pre>
+          </template>
+        </section>
+        {% else %}
+        <div class="empty">Select a request to inspect details.</div>
+        {% endif %}
       </section>
     </div>
   </div>
@@ -441,7 +570,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 modalConfirmBtn?.addEventListener("click", async () => {
-  const response = await fetch("$escaped_clear_path", { method: "POST" });
+  const response = await fetch("{{ escaped_clear_path }}", { method: "POST" });
   if (response.ok) {
     window.location.reload();
     return;
@@ -457,8 +586,8 @@ const dashboardLayout = document.getElementById("dashboard-layout");
 const toggleRequestsBtn = document.getElementById("toggle-requests-btn");
 const toggleRequestsBtnCollapsed = document.getElementById("toggle-requests-btn-collapsed");
 const themeToggleBtn = document.getElementById("theme-toggle-btn");
-const defaultRequestsCollapsed = "$default_requests_collapsed" === "1";
-const defaultPyinstrumentExpanded = "$default_pyinstrument_expanded" === "1";
+const defaultRequestsCollapsed = "{{ default_requests_collapsed }}" === "1";
+const defaultPyinstrumentExpanded = "{{ default_pyinstrument_expanded }}" === "1";
 
 const REQUESTS_COLLAPSED_KEY = "silk.requests.collapsed";
 const PYINSTRUMENT_EXPANDED_KEY = "silk.pyinstrument.expanded";
