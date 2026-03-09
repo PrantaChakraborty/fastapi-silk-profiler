@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from typing import Annotated
 
+import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -256,3 +257,7 @@ def analysis_demo(session: SessionDep) -> dict[str, int]:
     ).scalar_one()
 
     return {"queries_executed": 3 + len(item_ids) + 1, "item_ids_used": len(item_ids)}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)

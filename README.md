@@ -133,7 +133,7 @@ uv run twine check dist/*
 Run example app:
 
 ```bash
-uv run uvicorn examples.basic_app.main:app --reload
+uvicorn examples.basic_app.main:app --reload
 ```
 
 The example app includes CRUD + workload routes so you can generate profiling data without another project:
