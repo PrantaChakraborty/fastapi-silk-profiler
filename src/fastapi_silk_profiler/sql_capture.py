@@ -140,25 +140,39 @@ def _capture_explain_plan(
     parameters: object,
     max_statements: int,
 ) -> list[str]:
-    """Capture SQLite EXPLAIN QUERY PLAN rows for SELECT statements."""
+    """Capture EXPLAIN rows for supported dialects and query shapes."""
     if max_statements <= 0:
         return []
     explain_count = cast(int, conn.info.get("_silk_explain_count", 0))
     if explain_count >= max_statements:
         return []
     dialect_name = getattr(conn.dialect, "name", "")
-    if dialect_name != "sqlite":
+    normalized_statement = statement.lstrip().lower()
+    if not (normalized_statement.startswith("select") or normalized_statement.startswith("with")):
         return []
-    if not statement.lstrip().lower().startswith("select"):
+    if dialect_name not in {"sqlite", "postgresql"}:
         return []
     conn.info["_silk_explain_active"] = True
     try:
+        explain_sql = (
+            f"EXPLAIN QUERY PLAN {statement}"
+            if dialect_name == "sqlite"
+            else f"EXPLAIN (FORMAT TEXT) {statement}"
+        )
         result = cast(
             _ResultWithFetchAll,
-            conn.exec_driver_sql(f"EXPLAIN QUERY PLAN {statement}", parameters),
+            conn.exec_driver_sql(explain_sql, parameters),
         )
         rows = result.fetchall()
-        plan_lines = [", ".join(str(part) for part in row) for row in rows]
+        if dialect_name == "sqlite":
+            plan_lines = [", ".join(str(part) for part in row) for row in rows]
+        else:
+            plan_lines = [
+                (", ".join(str(part) for part in row) if len(row) > 1 else str(row[0]))
+                if row
+                else ""
+                for row in rows
+            ]
         conn.info["_silk_explain_count"] = explain_count + 1
         return plan_lines
     except Exception:

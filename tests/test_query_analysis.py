@@ -137,7 +137,7 @@ def test_renderers_include_query_analysis_flags_and_explain() -> None:
     assert "badge-nplus1" in html_payload
     assert "Top Slow Query Offenders" in html_payload
     assert "Top Duplicate Query Offenders" in html_payload
-    assert "Top N+1 Query Offenders" in html_payload
+    assert "N+1 Query Groups (Collapsed)" in html_payload
 
 
 def test_renderers_show_empty_group_cards_without_flags() -> None:
@@ -170,7 +170,7 @@ def test_capture_explain_plan_branch_guards_and_failures() -> None:
     assert _capture_explain_plan(sqlite_conn, "select 1", (), 1) == []
 
     pg_conn = _FakeConnection(dialect_name="postgresql")
-    assert _capture_explain_plan(pg_conn, "select 1", (), 5) == []
+    assert _capture_explain_plan(pg_conn, "select 1", (), 5) == ["0, 0, 0, SCAN items"]
 
     sqlite_conn_2 = _FakeConnection(dialect_name="sqlite")
     assert _capture_explain_plan(sqlite_conn_2, "insert into t values (1)", (), 5) == []
@@ -183,6 +183,97 @@ def test_capture_explain_plan_branch_guards_and_failures() -> None:
     assert plan == ["0, 0, 0, SCAN items"]
     assert ok_conn.info["_silk_explain_active"] is False
     assert ok_conn.info["_silk_explain_count"] == 1
+
+
+def test_reports_dashboard_collapses_n_plus_one_timeline_rows() -> None:
+    report = ProfileReport(
+        method="GET",
+        path="/items",
+        status_code=200,
+        duration_ms=30,
+        sql_queries=[
+            SQLQueryRecord(
+                statement="SELECT * FROM items WHERE id = :id",
+                params="{'id': 1}",
+                duration_ms=3,
+                rowcount=1,
+                normalized_statement="select * from items where id = ?",
+                is_n_plus_one=True,
+            ),
+            SQLQueryRecord(
+                statement="SELECT * FROM items WHERE id = :id",
+                params="{'id': 2}",
+                duration_ms=4,
+                rowcount=1,
+                normalized_statement="select * from items where id = ?",
+                is_n_plus_one=True,
+            ),
+            SQLQueryRecord(
+                statement="SELECT * FROM items WHERE id = :id",
+                params="{'id': 3}",
+                duration_ms=5,
+                rowcount=1,
+                normalized_statement="select * from items where id = ?",
+                is_n_plus_one=True,
+            ),
+        ],
+    )
+    html_payload = render_reports_dashboard(
+        [report],
+        report,
+        "/_silk/reports",
+        "/_silk/reports/clear",
+    )
+
+    assert html_payload.count("timeline-row is-nplus1") == 1
+    assert "n+1 x3" in html_payload
+    assert "3 unique param sets" in html_payload
+    assert "4.00 each · 12.00 total" in html_payload
+
+
+def test_reports_dashboard_collapses_duplicate_timeline_rows() -> None:
+    report = ProfileReport(
+        method="GET",
+        path="/items",
+        status_code=200,
+        duration_ms=30,
+        sql_queries=[
+            SQLQueryRecord(
+                statement="SELECT * FROM items WHERE id = :id",
+                params="{'id': 1}",
+                duration_ms=2,
+                rowcount=1,
+                normalized_statement="select * from items where id = ?",
+                is_duplicate=True,
+            ),
+            SQLQueryRecord(
+                statement="SELECT * FROM items WHERE id = :id",
+                params="{'id': 1}",
+                duration_ms=4,
+                rowcount=1,
+                normalized_statement="select * from items where id = ?",
+                is_duplicate=True,
+            ),
+            SQLQueryRecord(
+                statement="SELECT * FROM items WHERE id = :id",
+                params="{'id': 1}",
+                duration_ms=5,
+                rowcount=1,
+                normalized_statement="select * from items where id = ?",
+                is_duplicate=True,
+            ),
+        ],
+    )
+    html_payload = render_reports_dashboard(
+        [report],
+        report,
+        "/_silk/reports",
+        "/_silk/reports/clear",
+    )
+
+    assert html_payload.count("timeline-row is-duplicate") == 1
+    assert "duplicate x3" in html_payload
+    assert "3.67 each · 11.00 total" in html_payload
 
 
 def test_after_cursor_execute_returns_when_capture_not_started() -> None:
