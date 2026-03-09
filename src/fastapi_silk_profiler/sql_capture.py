@@ -62,6 +62,12 @@ class _ResultWithFetchAll(Protocol):
         """Fetch all result rows."""
 
 
+class _ExceptionContextWithConnection(Protocol):
+    """Protocol for SQLAlchemy handle_error exception context."""
+
+    connection: _ConnectionWithInfo | None
+
+
 def _safe_repr(value: object, max_len: int = 500) -> str:
     """Create a bounded string representation for SQL params.
 
@@ -134,6 +140,26 @@ def _after_cursor_execute(
     collector.append(record)
 
 
+def _handle_error(exception_context: _ExceptionContextWithConnection) -> None:
+    """Drop stale timing frame when a SQL execution fails.
+
+    SQLAlchemy emits ``before_cursor_execute`` for statements that fail, but
+    ``after_cursor_execute`` does not run for those failures. Without popping
+    the timing frame here, the next successful query can read stale timing data.
+    """
+    conn = exception_context.connection
+    if conn is None:
+        return
+    if cast(bool, conn.info.get("_silk_explain_active", False)):
+        return
+    timings = cast(
+        list[tuple[str, float]],
+        conn.info.get("_silk_query_timings", []),
+    )
+    if timings:
+        timings.pop()
+
+
 def _capture_explain_plan(
     conn: _ConnectionWithInfo,
     statement: str,
@@ -191,6 +217,7 @@ def ensure_sqlalchemy_hooks() -> None:
             return
         event.listen(Engine, "before_cursor_execute", _before_cursor_execute)
         event.listen(Engine, "after_cursor_execute", _after_cursor_execute)
+        event.listen(Engine, "handle_error", _handle_error)
         _LISTENERS_REGISTERED = True
 
 

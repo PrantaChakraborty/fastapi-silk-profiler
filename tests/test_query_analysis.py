@@ -8,7 +8,14 @@ from fastapi_silk_profiler.config import DashboardUIConfig
 from fastapi_silk_profiler.models import ProfileReport, SQLQueryRecord
 from fastapi_silk_profiler.query_analysis import QueryAnalysisConfig, analyze_queries, normalize_sql
 from fastapi_silk_profiler.renderers import render_reports_dashboard, render_text
-from fastapi_silk_profiler.sql_capture import _after_cursor_execute, _capture_explain_plan
+from fastapi_silk_profiler.sql_capture import (
+    _after_cursor_execute,
+    _before_cursor_execute,
+    _capture_explain_plan,
+    _handle_error,
+    start_sql_capture,
+    stop_sql_capture,
+)
 
 
 class _FakeResult:
@@ -39,6 +46,11 @@ class _FakeConnection:
 
 class _FakeCursor:
     rowcount = 1
+
+
+class _FakeExceptionContext:
+    def __init__(self, connection: _FakeConnection | None) -> None:
+        self.connection = connection
 
 
 def test_analyze_queries_marks_expected_flags() -> None:
@@ -286,6 +298,52 @@ def test_after_cursor_execute_returns_when_capture_not_started() -> None:
         context=object(),
         executemany=False,
     )
+
+
+def test_handle_error_pops_stale_timing_frame() -> None:
+    conn = _FakeConnection(dialect_name="sqlite")
+    conn.info["_silk_query_timings"] = [("select 1", 1.0), ("select bad", 2.0)]
+
+    _handle_error(_FakeExceptionContext(connection=conn))
+
+    assert conn.info["_silk_query_timings"] == [("select 1", 1.0)]
+
+
+def test_handle_error_prevents_next_query_from_using_failed_query_timing() -> None:
+    conn = _FakeConnection(dialect_name="sqlite")
+    collector, token = start_sql_capture()
+    try:
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select failed",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+        _handle_error(_FakeExceptionContext(connection=conn))
+
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select ok",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+        _after_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select ok",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+    finally:
+        stop_sql_capture(token)
+
+    assert len(collector) == 1
+    assert collector[0].statement == "select ok"
 
 
 def test_reports_dashboard_respects_ui_config() -> None:
