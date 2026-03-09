@@ -122,6 +122,8 @@ def render_html_dashboard(report: ProfileReport) -> str:
                 "is_critical": query.is_critical,
                 "is_duplicate": query.is_duplicate,
                 "is_n_plus_one": query.is_n_plus_one,
+                "sql_truncated": query.sql_truncated,
+                "params_truncated": query.params_truncated,
                 "explain_plan": query.explain_plan,
             }
             for query in report.sql_queries

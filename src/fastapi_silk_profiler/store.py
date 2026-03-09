@@ -33,6 +33,8 @@ def _sql_rows_to_records(rows: Sequence[sqlite3.Row]) -> list[SQLQueryRecord]:
             is_critical=bool(row["is_critical"]),
             is_duplicate=bool(row["is_duplicate"]),
             is_n_plus_one=bool(row["is_n_plus_one"]),
+            sql_truncated=bool(row["sql_truncated"]),
+            params_truncated=bool(row["params_truncated"]),
             explain_plan=json.loads(str(row["explain_plan"] or "[]")),
         )
         for row in rows
@@ -169,6 +171,8 @@ class SQLiteReportStore:
                     is_critical INTEGER NOT NULL DEFAULT 0,
                     is_duplicate INTEGER NOT NULL DEFAULT 0,
                     is_n_plus_one INTEGER NOT NULL DEFAULT 0,
+                    sql_truncated INTEGER NOT NULL DEFAULT 0,
+                    params_truncated INTEGER NOT NULL DEFAULT 0,
                     explain_plan TEXT NOT NULL DEFAULT '[]',
                     FOREIGN KEY(report_id) REFERENCES reports(id) ON DELETE CASCADE
                 )
@@ -219,6 +223,18 @@ class SQLiteReportStore:
                 sql_type="TEXT",
                 default_sql="'[]'",
             )
+            self._ensure_column(
+                table="sql_queries",
+                column="sql_truncated",
+                sql_type="INTEGER",
+                default_sql="0",
+            )
+            self._ensure_column(
+                table="sql_queries",
+                column="params_truncated",
+                sql_type="INTEGER",
+                default_sql="0",
+            )
 
     def add(self, report: ProfileReport) -> None:
         """Persist one report.
@@ -252,9 +268,9 @@ class SQLiteReportStore:
                 INSERT INTO sql_queries (
                     report_id, position, statement, params, duration_ms, rowcount,
                     normalized_statement, is_slow, is_critical,
-                    is_duplicate, is_n_plus_one, explain_plan
+                    is_duplicate, is_n_plus_one, sql_truncated, params_truncated, explain_plan
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -269,6 +285,8 @@ class SQLiteReportStore:
                         int(query.is_critical),
                         int(query.is_duplicate),
                         int(query.is_n_plus_one),
+                        int(query.sql_truncated),
+                        int(query.params_truncated),
                         json.dumps(query.explain_plan),
                     )
                     for index, query in enumerate(report.sql_queries)
@@ -389,7 +407,7 @@ class SQLiteReportStore:
             """
             SELECT statement, params, duration_ms, rowcount
                    ,normalized_statement, is_slow, is_critical
-                   ,is_duplicate, is_n_plus_one, explain_plan
+                   ,is_duplicate, is_n_plus_one, sql_truncated, params_truncated, explain_plan
             FROM sql_queries
             WHERE report_id = ?
             ORDER BY position ASC

@@ -21,6 +21,8 @@ class SQLQueryRecord:
     is_critical: bool = False
     is_duplicate: bool = False
     is_n_plus_one: bool = False
+    sql_truncated: bool = False
+    params_truncated: bool = False
     explain_plan: list[str] = field(default_factory=list)
 
 

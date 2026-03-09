@@ -363,6 +363,88 @@ def test_sql_param_masking_can_expose_raw_params_when_enabled() -> None:
     assert "'token': 'abc'" in collector[0].params
 
 
+def test_sql_capture_truncates_statement_and_params_with_flags() -> None:
+    conn = _FakeConnection(dialect_name="sqlite")
+    collector, token = start_sql_capture(
+        SQLCaptureOptions(
+            max_sql_length=24,
+            max_params_length=20,
+        )
+    )
+    try:
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="SELECT very_long_column_name FROM items WHERE id = :id",
+            parameters={"id": "12345678901234567890"},
+            context=object(),
+            executemany=False,
+        )
+        _after_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="SELECT very_long_column_name FROM items WHERE id = :id",
+            parameters={"id": "12345678901234567890"},
+            context=object(),
+            executemany=False,
+        )
+    finally:
+        stop_sql_capture(token)
+
+    assert len(collector) == 1
+    assert collector[0].sql_truncated is True
+    assert collector[0].params_truncated is True
+    assert len(collector[0].statement) == 24
+    assert len(collector[0].params) == 20
+
+
+def test_sql_capture_respects_max_queries_per_request() -> None:
+    conn = _FakeConnection(dialect_name="sqlite")
+    collector, token = start_sql_capture(
+        SQLCaptureOptions(
+            max_queries_per_request=1,
+        )
+    )
+    try:
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 1",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+        _after_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 1",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+        _before_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 2",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+        _after_cursor_execute(
+            conn=conn,
+            cursor=_FakeCursor(),
+            statement="select 2",
+            parameters=(),
+            context=object(),
+            executemany=False,
+        )
+    finally:
+        stop_sql_capture(token)
+
+    assert len(collector) == 1
+    assert collector[0].statement == "select 1"
+
+
 def test_handle_error_pops_stale_timing_frame() -> None:
     conn = _FakeConnection(dialect_name="sqlite")
     conn.info["_silk_query_timings"] = [("select 1", 1.0), ("select bad", 2.0)]

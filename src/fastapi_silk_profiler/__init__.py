@@ -1,6 +1,6 @@
 """Public API for fastapi-silk-profiler."""
 
-from .config import DashboardUIConfig, ProfilerConfig, SQLPrivacyConfig
+from .config import DashboardUIConfig, ProfilerConfig, SQLCaptureConfig, SQLPrivacyConfig
 from .endpoints import register_profiler_routes
 from .middleware import SilkProfilerMiddleware
 from .models import ProfileReport, QueryAnalysisSummary, SQLQueryRecord
@@ -16,6 +16,7 @@ __all__ = [
     "QueryAnalysisConfig",
     "QueryAnalysisSummary",
     "ReportStore",
+    "SQLCaptureConfig",
     "SQLPrivacyConfig",
     "SQLQueryRecord",
     "SilkProfilerMiddleware",

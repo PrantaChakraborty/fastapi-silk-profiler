@@ -42,6 +42,21 @@ class SQLPrivacyConfig:
 
 
 @dataclass(slots=True)
+class SQLCaptureConfig:
+    """Configuration for SQL capture limits and truncation behavior.
+
+    Attributes:
+        max_queries_per_request: Hard cap on captured SQL rows per request.
+        max_sql_length: Maximum SQL statement length before truncation.
+        max_params_length: Maximum serialized params length before truncation.
+    """
+
+    max_queries_per_request: int = 1000
+    max_sql_length: int = 5000
+    max_params_length: int = 500
+
+
+@dataclass(slots=True)
 class ProfilerConfig:
     """Runtime configuration for the profiling middleware.
 
@@ -51,6 +66,7 @@ class ProfilerConfig:
         exclude_paths: Path prefixes that should never be profiled.
         store_size: Maximum number of reports to keep in memory.
         capture_sql: Enables SQLAlchemy query capture when True.
+        sql_capture: SQL capture limits and truncation behavior.
         sql_privacy: SQL parameter privacy behavior.
         query_analysis: SQL query analysis behavior.
         dashboard_ui: Reports dashboard UI behavior.
@@ -63,6 +79,7 @@ class ProfilerConfig:
     )
     store_size: int = 100
     capture_sql: bool = True
+    sql_capture: SQLCaptureConfig = field(default_factory=SQLCaptureConfig)
     sql_privacy: SQLPrivacyConfig = field(default_factory=SQLPrivacyConfig)
     query_analysis: QueryAnalysisConfig = field(default_factory=QueryAnalysisConfig)
     dashboard_ui: DashboardUIConfig = field(default_factory=DashboardUIConfig)

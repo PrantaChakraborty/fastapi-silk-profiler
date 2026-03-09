@@ -89,6 +89,10 @@ Template files (independent from Python logic):
 - `exclude_paths: list[str]`
 - `store_size: int`
 - `capture_sql: bool`
+- `sql_capture: SQLCaptureConfig`
+  - `max_queries_per_request: int` (default `1000`)
+  - `max_sql_length: int` (default `5000`)
+  - `max_params_length: int` (default `500`)
 - `sql_privacy: SQLPrivacyConfig`
   - `expose_raw_params: bool` (default `False`)
   - `redacted_param_keys: list[str]` (default includes `password`, `token`, `secret`, etc.)

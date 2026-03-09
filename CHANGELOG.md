@@ -18,6 +18,8 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 - Configurable profiler URL prefix via `setup_silk_profiler(..., profile_path_prefix=...)`.
 - SQL parameter privacy controls via `SQLPrivacyConfig` with default masking for
   sensitive keys and optional raw-param capture.
+- SQL capture limits via `SQLCaptureConfig` (`max_queries_per_request`,
+  `max_sql_length`, `max_params_length`) with per-query truncation flags.
 
 ### Changed
 - `setup_silk_profiler` now supports `sqlite_db_path`.

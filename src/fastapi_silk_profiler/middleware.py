@@ -69,6 +69,9 @@ class SilkProfilerMiddleware(BaseHTTPMiddleware):
                     ),
                     expose_raw_params=self._config.sql_privacy.expose_raw_params,
                     redacted_param_keys=tuple(self._config.sql_privacy.redacted_param_keys),
+                    max_queries_per_request=self._config.sql_capture.max_queries_per_request,
+                    max_sql_length=self._config.sql_capture.max_sql_length,
+                    max_params_length=self._config.sql_capture.max_params_length,
                 )
             )
 

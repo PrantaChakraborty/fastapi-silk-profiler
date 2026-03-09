@@ -38,6 +38,9 @@ class SQLCaptureOptions:
         "api_key",
         "apikey",
     )
+    max_queries_per_request: int = 1000
+    max_sql_length: int = 5000
+    max_params_length: int = 500
 
 
 @dataclass(slots=True)
@@ -93,10 +96,22 @@ def _safe_repr(value: object, max_len: int = 500) -> str:
     return helper.repr(value)
 
 
-def _sanitize_params(parameters: object, options: SQLCaptureOptions | None) -> str:
+def _truncate_text(value: str, max_len: int) -> tuple[str, bool]:
+    """Truncate text to max length, returning (text, was_truncated)."""
+    if max_len <= 0:
+        return "", bool(value)
+    if len(value) <= max_len:
+        return value, False
+    if max_len <= 3:
+        return value[:max_len], True
+    return f"{value[:max_len - 3]}...", True
+
+
+def _sanitize_params(parameters: object, options: SQLCaptureOptions | None) -> tuple[str, bool]:
     """Return privacy-safe params representation for one SQL statement."""
+    max_params_len = options.max_params_length if options is not None else 500
     if options is not None and options.expose_raw_params:
-        return _safe_repr(parameters)
+        return _truncate_text(_safe_repr(parameters, max_len=max_params_len), max_params_len)
 
     if isinstance(parameters, dict):
         lowered_keys = (
@@ -109,9 +124,9 @@ def _sanitize_params(parameters: object, options: SQLCaptureOptions | None) -> s
             key_text = str(key).lower()
             should_mask = any(token in key_text for token in lowered_keys)
             masked[key] = "***" if should_mask else value
-        return _safe_repr(masked)
+        return _truncate_text(_safe_repr(masked, max_len=max_params_len), max_params_len)
 
-    return _safe_repr(parameters)
+    return _truncate_text(_safe_repr(parameters, max_len=max_params_len), max_params_len)
 
 
 def _before_cursor_execute(
@@ -153,12 +168,21 @@ def _after_cursor_execute(
     )
     if collector is None or not timings:
         return
+    max_queries = options.max_queries_per_request if options is not None else 1000
+    if len(collector) >= max_queries:
+        timings.pop()
+        return
     previous_statement, started = timings.pop()
+    max_sql_len = options.max_sql_length if options is not None else 5000
+    statement_text, sql_truncated = _truncate_text(previous_statement, max_sql_len)
+    params_text, params_truncated = _sanitize_params(parameters, options)
     record = SQLQueryRecord(
-        statement=previous_statement,
-        params=_sanitize_params(parameters, options),
+        statement=statement_text,
+        params=params_text,
         duration_ms=(perf_counter() - started) * 1000,
         rowcount=getattr(cursor, "rowcount", None),
+        sql_truncated=sql_truncated,
+        params_truncated=params_truncated,
     )
     if options is not None and options.capture_explain:
         record.explain_plan = _capture_explain_plan(
